@@ -387,6 +387,7 @@ const options = {
 
 const specs = swaggerJsdoc(options);
 app.get("/health", (req, res) => res.status(200).json({ status: "ok" }));
+app.get("/debug-mongo", async (req, res) => {\n try {\n await mongoose.connection.asPromise();\n res.json({ ok: true, readyState: mongoose.connection.readyState });\n } catch (e) {\n res.status(500).json({ ok: false, name: e.name, message: e.message, reason: e.reason ? String(e.reason) : null });\n }\n});
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(specs));
 
 
