@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { createOrder, getMenuItems, getOrders, getTables, updateOrderStatus, updateOrderSectionStatus, updateOrderItems } from '../services/adminApi.js';
+import { createOrder, getMenuItems, getOrders, getTables, updateOrderStatus, updateOrderSectionStatus, updateOrderItems, deleteOrder } from '../services/adminApi.js';
 import { Spinner } from '../features/auth/components/Spinner.jsx';
 import { useAuthStore } from '../features/auth/store/authStore.js';
 import { showError, showSuccess } from '../shared/utils/toast.js';
@@ -77,7 +77,7 @@ const generateOrderPrintHtml = (order) => {
   const waiter = order.waiter || '';
   const guests = order.guests || '';
 
-  const visibleItems = (order.items || []).filter((item) => !(item.isIncluded && item.hideInBebidas));
+  const visibleItems = (order.items || []).filter((item) => !item.isIncluded);
 
   // Si hay más artículos que renglones impresos (14), encogemos el alto de fila
   // para que sigan cabiendo antes de la fila de "Total a pagar" (en vez de
@@ -443,6 +443,17 @@ export const Orders = () => {
     }
   };
 
+  const handleDeleteOrder = async (orderId) => {
+    try {
+      await deleteOrder(orderId);
+      setOrders((current) => current.filter((order) => order._id !== orderId));
+      showSuccess('Pedido cancelado y eliminado correctamente');
+    } catch (error) {
+      console.error(error);
+      showError(error?.response?.data?.error || 'No se pudo cancelar el pedido');
+    }
+  };
+
   // Edit order items
   const [editingOrderId, setEditingOrderId] = useState(null);
   const [editingItems, setEditingItems] = useState([]);
@@ -494,28 +505,25 @@ export const Orders = () => {
     try {
       setEditingLoading(true);
       const existing = orders.find((o) => o._id === editingOrderId) || { items: [] };
-      const preservedHiddenIncludedItems = (existing.items || []).filter((it) => {
-        if (!it.delivered || !it.isIncluded || !it.hideInBebidas) return false;
-        const editMatch = editingItems.some((edit) => {
-          const editMenuItem = edit.menuItem ? String(edit.menuItem) : '';
-          const existingMenuItem = String(it.menuItem?._id || it.menuItem || '');
-          const editLabel = String(edit.label || '').trim();
-          const existingLabel = String(it.label || '').trim();
-          return editMenuItem && editMenuItem === existingMenuItem && editLabel === existingLabel;
-        });
-        return !editMatch;
-      }).map((it) => ({
+      const preservedIncludedItems = (existing.items || []).filter((it) => it.isIncluded).map((it) => ({
         menuItem: it.menuItem?._id || it.menuItem,
         label: it.label || '',
         quantity: it.quantity,
         observations: it.observations || '',
-        delivered: true,
+        delivered: Boolean(it.delivered),
         isIncluded: true,
         price: it.price,
         hideInBebidas: Boolean(it.hideInBebidas),
       }));
+      const preservedOriginalItems = (existing.items || []).filter((it) => !it.isIncluded).map((it) => ({
+        menuItem: it.menuItem?._id || it.menuItem,
+        quantity: it.quantity,
+        observations: it.observations || '',
+        delivered: Boolean(it.delivered),
+      }));
       const payloadItems = [
-        ...preservedHiddenIncludedItems,
+        ...preservedIncludedItems,
+        ...preservedOriginalItems,
         ...editingItems.map((it) => ({
           menuItem: it.isIncluded ? undefined : it.menuItem,
           label: it.isIncluded ? it.label || it.name : undefined,
@@ -526,6 +534,9 @@ export const Orders = () => {
           delivered: it.delivered,
         })),
       ];
+      if (!payloadItems.length) {
+        throw new Error('El pedido debe tener al menos un platillo.');
+      }
       const updated = await updateOrderItems(editingOrderId, payloadItems);
       setOrders((current) => current.map((o) => (o._id === updated._id ? updated : o)));
       showSuccess('Pedido actualizado correctamente');
@@ -734,17 +745,22 @@ export const Orders = () => {
         <section className='grid gap-4 xl:grid-cols-2'>
           {filteredOrders.map((order) => (
             <article key={order._id} className='admin-panel p-5'>
-              <div className='flex items-center justify-between gap-3'>
-                <div>
-                  <p className='admin-kicker'>Pedido {order.orderNumber || `#${order._id?.slice(-6)}`}</p>
-                  <h3 className='mt-1 text-xl font-black text-[#e0e0e0]'>{formatDate(order.createdAt)}</h3>
-                  <p className='mt-1 text-base font-semibold text-[#e0e0e0]'>{
-                    order?.table?.name?.trim()
-                      ? `Mesa: ${order.table.name}`
-                      : order?.table?.number
-                        ? `Mesa: ${order.table.number}`
-                        : 'Sin mesa'
-                  }</p>
+              <div className='flex items-start justify-between gap-3'>
+                <div className='flex flex-col gap-3'>
+                  {canEditOrderItems && (
+                    <button type='button' onClick={() => handleDeleteOrder(order._id)} className='admin-button-danger w-fit px-3 py-2 text-sm'>Cancelar pedido</button>
+                  )}
+                  <div>
+                    <p className='admin-kicker'>Pedido {order.orderNumber || `#${order._id?.slice(-6)}`}</p>
+                    <h3 className='mt-1 text-xl font-black text-[#e0e0e0]'>{formatDate(order.createdAt)}</h3>
+                    <p className='mt-1 text-base font-semibold text-[#e0e0e0]'>{
+                      order?.table?.name?.trim()
+                        ? `Mesa: ${order.table.name}`
+                        : order?.table?.number
+                          ? `Mesa: ${order.table.number}`
+                          : 'Sin mesa'
+                    }</p>
+                  </div>
                 </div>
                 <div className='flex flex-col gap-2'>
                   {view === 'bebidas' && (

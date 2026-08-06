@@ -39,13 +39,14 @@ const isDrinkItemFromMenu = (menuItem) => {
 };
 
 const isIncludedFreeItem = (item) => {
+    if (!item) return false;
     const label = String(item?.label || "").toLowerCase();
-    return item?.isIncluded || label.includes("tortilla") || label.includes("tostada");
+    return item?.isIncluded || (Number(item?.price || 0) === 0 && (label.includes("tortilla") || label.includes("tostada")));
 };
 
 const isDrinkOrderItem = (item) => {
     if (!item) return false;
-    if (item.isIncluded) return false;
+    if (item.isIncluded) return !Boolean(item.hideInBebidas);
     if (item.isDrinkItem) return true;
     const label = String(item?.label || "").toLowerCase();
     if (item?.menuItem && (label.includes("tortilla") || label.includes("tostada"))) return true;
@@ -54,6 +55,12 @@ const isDrinkOrderItem = (item) => {
 
 const isCaldoItem = (menuItem) => !!menuItem && String(menuItem.name || "").toLowerCase().includes(CALDO_KEYWORD);
 const isCevicheItem = (menuItem) => !!menuItem && String(menuItem.name || "").toLowerCase().includes(CEVICHE_KEYWORD);
+const isMainCourseItem = (menuItem) => {
+    if (!menuItem) return false;
+    const category = String(menuItem.category || "").toLowerCase();
+    const name = String(menuItem.name || "").toLowerCase();
+    return category.includes("platos fuertes") && !name.includes("ceviche");
+};
 
 const ensureIncludedFreeItemsForOrder = ({ items, existingDeliveredIncludedItems = [] }) => {
     const preservedLabels = new Set(existingDeliveredIncludedItems.map((it) => it.label));
@@ -67,6 +74,7 @@ const ensureIncludedFreeItemsForOrder = ({ items, existingDeliveredIncludedItems
         observations: it.observations || "",
         delivered: true,
         isIncluded: true,
+        hideInBebidas: Boolean(it.hideInBebidas),
     }));
 
     const includedItems = [...preserved];
@@ -93,6 +101,32 @@ const ensureIncludedFreeItemsForOrder = ({ items, existingDeliveredIncludedItems
             isIncluded: true,
             hideInBebidas: true,
         });
+    }
+
+    const mainCourseMap = new Map();
+    items.forEach((it) => {
+        const menuItem = it.menuItemDoc || it.menuItem;
+        if (!isMainCourseItem(menuItem)) return;
+        const label = String(menuItem.name || it.label || '').trim();
+        if (!label) return;
+        const existing = mainCourseMap.get(label) || { quantity: 0, label };
+        existing.quantity += Number(it.quantity || 1);
+        mainCourseMap.set(label, existing);
+    });
+
+    for (const { quantity, label } of mainCourseMap.values()) {
+        const includedLabel = `Tortillas para: ${label}`;
+        if (!preservedLabels.has(includedLabel)) {
+            includedItems.push({
+                label: includedLabel,
+                quantity: quantity || 1,
+                price: 0,
+                observations: "",
+                delivered: false,
+                isIncluded: true,
+                hideInBebidas: false,
+            });
+        }
     }
 
     return includedItems;
@@ -290,6 +324,24 @@ export const getOrderById = async (req, res) => {
         }
 
         res.json(normalizeOrderResponse(order));
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+export const deleteOrder = async (req, res) => {
+    try {
+        const order = await Order.findById(req.params.id);
+        if (!order) {
+            return res.status(404).json({ error: 'Pedido no encontrado.' });
+        }
+
+        if (order.table) {
+            await Table.findByIdAndUpdate(order.table, { status: 'disponible' });
+        }
+
+        await Order.findByIdAndDelete(req.params.id);
+        res.json({ message: 'Pedido eliminado correctamente.' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

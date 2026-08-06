@@ -178,5 +178,6 @@ router.patch('/:id/status', verifyToken, verifyRole([ROLE_ADMIN, ROLE_COCINA, RO
 router.put('/:id/status', verifyToken, verifyRole([ROLE_ADMIN, ROLE_COCINA, ROLE_RECEPCION]), controller.updateStatus);
 // Actualizar items del pedido (cantidad, observaciones, añadir/quitar items)
 router.patch('/:id/items', verifyToken, verifyRole([ROLE_ADMIN, ROLE_RECEPCION, ROLE_COCINA]), controller.updateOrderItems);
+router.delete('/:id', verifyToken, verifyRole([ROLE_ADMIN, ROLE_RECEPCION, ROLE_COCINA]), controller.deleteOrder);
 
 export default router;

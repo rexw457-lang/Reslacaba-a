@@ -111,6 +111,11 @@ export const updateOrderItems = async (id, items) => {
   return data;
 };
 
+export const deleteOrder = async (id) => {
+  const { data } = await axiosAdmin.delete(`/orders/${id}`);
+  return data;
+};
+
 export const getOrderHistory = async (status = '') => {
   const { data } = await axiosAdmin.get('/orders/history', { params: status ? { status } : {} });
   return Array.isArray(data) ? data : [];
