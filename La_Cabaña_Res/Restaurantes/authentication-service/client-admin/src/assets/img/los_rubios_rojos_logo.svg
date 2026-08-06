@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 220" role="img" aria-labelledby="laCabanaLogoTitle">
+  <title id="laCabanaLogoTitle">La Cabaña</title>
+  <defs>
+    <linearGradient id="lc-gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F2D680" />
+      <stop offset="55%" stop-color="#F2C879" />
+      <stop offset="100%" stop-color="#BF9E60" />
+    </linearGradient>
+    <linearGradient id="lc-gold-soft" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#BF9E60" stop-opacity="0" />
+      <stop offset="50%" stop-color="#F2D680" stop-opacity="1" />
+      <stop offset="100%" stop-color="#BF9E60" stop-opacity="0" />
+    </linearGradient>
+    <radialGradient id="lc-vein" cx="0%" cy="0%" r="42%">
+      <stop offset="0%" stop-color="#F2D680" stop-opacity="0.22" />
+      <stop offset="100%" stop-color="#F2D680" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+
+  <!-- Fondo -->
+  <rect x="0" y="0" width="640" height="220" fill="#061726" />
+  <rect x="0" y="0" width="640" height="220" fill="url(#lc-vein)" />
+
+  <!-- Vetas doradas decorativas (esquina superior izquierda) -->
+  <g stroke="url(#lc-gold)" stroke-width="1.1" fill="none" opacity="0.55" stroke-linecap="round">
+    <path d="M6 4 C 40 22, 34 46, 66 58 S 96 44, 128 60" />
+    <path d="M4 20 C 26 34, 22 54, 46 64" />
+    <path d="M14 2 C 30 10, 28 24, 46 30" />
+  </g>
+
+  <!-- Vetas doradas decorativas (esquina inferior derecha) -->
+  <g stroke="url(#lc-gold)" stroke-width="1.1" fill="none" opacity="0.55" stroke-linecap="round">
+    <path d="M634 216 C 600 198, 606 174, 574 162 S 544 176, 512 160" />
+    <path d="M636 200 C 614 186, 618 166, 594 156" />
+    <path d="M626 218 C 610 210, 612 196, 594 190" />
+  </g>
+
+  <!-- Marco fino superior/inferior -->
+  <path d="M20 14 H 300 M340 14 H 620" stroke="url(#lc-gold-soft)" stroke-width="1" opacity="0.5" />
+  <path d="M20 206 H 300 M340 206 H 620" stroke="url(#lc-gold-soft)" stroke-width="1" opacity="0.5" />
+
+  <!-- Emblema: montañas, arco y cabaña -->
+  <g transform="translate(320 88)" fill="none" stroke="url(#lc-gold)" stroke-width="3.4" stroke-linejoin="round" stroke-linecap="round">
+    <!-- Montaña izquierda -->
+    <path d="M-190 44 L-118 -46 L-46 44" />
+    <!-- Montaña derecha -->
+    <path d="M46 44 L118 -46 L190 44" />
+    <!-- Arco central -->
+    <path d="M-64 44 C -64 4, -18 4, -18 44" stroke-width="2.6" />
+    <!-- Montaña central (detrás de la cabaña) -->
+    <path d="M-30 44 L18 -14 L66 44" stroke-width="2.6" opacity="0.9" />
+    <!-- Techo de la cabaña -->
+    <path d="M-20 12 L18 -22 L56 12" stroke-width="3.4" />
+    <!-- Cuerpo de la cabaña -->
+    <path d="M-8 12 L-8 44 M44 12 L44 44" stroke-width="3" />
+    <!-- Puerta -->
+    <path d="M8 44 L8 24 C 8 18, 26 18, 26 24 L26 44" stroke-width="2.6" />
+    <!-- Chimenea -->
+    <path d="M34 -6 L34 -24 L44 -24 L44 2" stroke-width="2.6" />
+    <!-- Línea de base -->
+    <path d="M-190 44 H 190" stroke-width="2.2" opacity="0.9" />
+  </g>
+
+  <!-- Texto: LA CABAÑA -->
+  <text x="320" y="176" text-anchor="middle" font-family="'Trajan Pro','Cinzel',Georgia,'Times New Roman',serif" font-size="40" font-weight="700" letter-spacing="10" fill="url(#lc-gold)">LA CABAÑA</text>
+
+  <!-- Filete bajo el texto -->
+  <path d="M150 190 H 260 M380 190 H 490" stroke="url(#lc-gold)" stroke-width="1.4" opacity="0.85" />
+  <circle cx="320" cy="190" r="3" fill="#F2D680" />
+</svg>

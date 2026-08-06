@@ -1,0 +1,14 @@
+services:
+  restaurants_mongo:
+    image: mongo:7
+    container_name: restaurants_mongo_db
+    environment:
+      MONGO_INITDB_DATABASE: restaurantes_db
+    ports:
+      - "27017:27017"
+    volumes:
+      - restaurants_mongo_data:/data/db
+    restart: unless-stopped
+
+volumes:
+  restaurants_mongo_data:

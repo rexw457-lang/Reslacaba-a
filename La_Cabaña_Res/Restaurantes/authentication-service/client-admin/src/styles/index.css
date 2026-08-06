@@ -1,0 +1,532 @@
+@import 'tailwindcss';
+/* ============================================================
+   LA CABAÑA — Tema Oscuro Premium
+   Paleta: #1a1a2e · #141426 · #e0e0e0 · #c19a6b · #e6be7d
+   ============================================================ */
+@theme {
+  --color-main-blue: #e6be7d;      /* dorado satinado (CTAs) */
+  --color-secondary: #c19a6b;      /* acento cobre/dorado cálido */
+  --color-tertiary: #dcb77c;       /* acento beige suave */
+  --color-accent: #e6be7d;         /* acento principal */
+  --color-surface: #1a1a2e;        /* fondo principal, azul marino profundo */
+  --color-surface-soft: #141426;   /* fondo suave para barras y paneles */
+  --color-card: #1a1a2e;           /* tarjetas / paneles */
+  --color-text: #e0e0e0;           /* texto principal muy claro */
+  --color-muted: #c19a6b;          /* texto/borde secundario */
+}
+
+:root {
+  font-family: 'Georgia', 'Cinzel', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  --main-blue: #e6be7d;
+  --navy-deep: #141426;
+  --navy: #1a1a2e;
+  --gold-light: #dcb77c;
+  --gold: #e6be7d;
+  --gold-bronze: #c19a6b;
+  --success-green: #27ae60;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body {
+  min-height: 100%;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.15s ease-out;
+}
+
+/* ---- Overrides de utilidades Tailwind para el tema oscuro/dorado ---- */
+
+.bg-gray-50 {
+  background-color: var(--color-surface) !important;
+}
+
+.bg-slate-50 {
+  background-color: var(--color-surface-soft) !important;
+}
+
+.bg-white {
+  background-color: var(--color-card) !important;
+}
+
+.bg-gray-100 {
+  background-color: rgba(242, 214, 128, 0.07) !important;
+}
+
+.text-gray-900 {
+  color: var(--color-secondary) !important;
+}
+
+.text-gray-700,
+.text-gray-600 {
+  color: var(--color-tertiary) !important;
+}
+
+.border-gray-200,
+.border-gray-300 {
+  border-color: rgba(212, 175, 55, 0.2) !important;
+}
+
+.bg-main-blue {
+  background-color: var(--main-blue) !important;
+}
+
+.text-main-blue {
+  color: var(--main-blue) !important;
+}
+
+.border-main-blue {
+  border-color: var(--main-blue) !important;
+}
+
+.focus\:border-main-blue:focus {
+  border-color: var(--main-blue) !important;
+}
+
+.hover\:bg-surface-soft:hover {
+  background-color: var(--color-surface-soft) !important;
+}
+
+.bg-surface-soft {
+  background-color: var(--color-surface-soft) !important;
+}
+
+/* Botones/pills dorados: el texto blanco por defecto no contrasta sobre dorado */
+.bg-main-blue.text-white {
+  color: var(--navy-deep) !important;
+}
+
+.bg-black\/40 {
+  background-color: rgba(2, 8, 15, 0.55) !important;
+}
+
+.sidebar-underline {
+  position: relative;
+}
+.sidebar-underline.active::after {
+  content: '';
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 6px;
+  height: 5px;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    rgba(230, 190, 125, 0.15) 0%,
+    #e6be7d 50%,
+    rgba(230, 190, 125, 0.15) 100%
+  );
+  filter: blur(1.5px);
+  z-index: 1;
+}
+
+@keyframes adminRise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes adminShimmer {
+  0% {
+    transform: translateX(-140%) skewX(-18deg);
+  }
+
+  100% {
+    transform: translateX(260%) skewX(-18deg);
+  }
+}
+
+/* ============================================================
+   Shell del panel de administración
+   ============================================================ */
+.admin-shell {
+  --admin-primary: #e6be7d;
+  --admin-secondary: #141426;
+  --admin-accent: #c19a6b;
+  --admin-bg: #1a1a2e;
+  --admin-card: #141426;
+  --admin-text: #e0e0e0;
+  --admin-muted: #c19a6b;
+  --admin-border: rgba(230, 190, 125, 0.16);
+  --admin-shadow: 0 18px 45px rgba(1, 6, 12, 0.35);
+  --admin-shadow-hover: 0 24px 65px rgba(1, 6, 12, 0.55);
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(230, 190, 125, 0.10), transparent 32rem),
+    radial-gradient(circle at bottom right, rgba(230, 190, 125, 0.08), transparent 30rem),
+    linear-gradient(180deg, #1a1a2e 0%, #141426 42%, #1a1a2e 100%);
+  color: var(--admin-text);
+}
+
+.admin-main {
+  animation: adminRise 320ms ease both;
+}
+
+.admin-page {
+  width: 100%;
+  max-width: 1500px;
+  margin: 0 auto;
+  animation: adminRise 360ms ease both;
+}
+
+.admin-kicker {
+  color: var(--admin-accent);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.admin-title {
+  color: var(--admin-text);
+  font-size: clamp(1.9rem, 3vw, 3rem);
+  font-weight: 850;
+  letter-spacing: 0;
+  line-height: 1.05;
+}
+
+.admin-subtitle {
+  color: var(--admin-muted);
+}
+
+.admin-card,
+.admin-panel {
+  background: rgba(20, 20, 46, 0.92);
+  border: 1px solid var(--admin-border);
+  box-shadow: var(--admin-shadow);
+  backdrop-filter: blur(16px);
+  color: #e0e0e0;
+}
+
+.admin-card {
+  border-radius: 1.25rem;
+  transition: transform 250ms ease, box-shadow 250ms ease, border-color 250ms ease;
+}
+
+.admin-card:hover {
+  border-color: rgba(212, 175, 55, 0.4);
+  box-shadow: var(--admin-shadow-hover);
+  transform: translateY(-3px);
+}
+
+.admin-panel {
+  border-radius: 1.5rem;
+}
+
+.admin-metric {
+  position: relative;
+  overflow: hidden;
+}
+
+.admin-metric::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.14), transparent 42%);
+  pointer-events: none;
+}
+
+.admin-button-primary,
+.admin-button-secondary,
+.admin-button-danger {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  border-radius: 999px;
+  font-weight: 800;
+  transition: transform 250ms ease, box-shadow 250ms ease, opacity 250ms ease, background 250ms ease;
+}
+
+.admin-button-primary {
+  overflow: hidden;
+  color: var(--navy-deep);
+  background: linear-gradient(135deg, var(--admin-primary), var(--admin-accent));
+  box-shadow: 0 16px 34px rgba(242, 200, 121, 0.28);
+}
+
+.admin-button-primary::after {
+  content: '';
+  position: absolute;
+  inset: -60% auto -60% -40%;
+  width: 34%;
+  background: rgba(255, 255, 255, 0.34);
+  filter: blur(2px);
+  opacity: 0;
+  z-index: -1;
+}
+
+.admin-button-primary:hover::after {
+  animation: adminShimmer 800ms ease;
+  opacity: 1;
+}
+
+.admin-button-primary:hover,
+.admin-button-secondary:hover,
+.admin-button-danger:hover {
+  transform: translateY(-2px);
+}
+
+.admin-button-secondary {
+  color: var(--admin-text);
+  border: 1px solid var(--admin-border);
+  background: rgba(212, 175, 55, 0.06);
+}
+
+.admin-button-secondary:hover {
+  color: var(--admin-primary);
+  border-color: rgba(212, 175, 55, 0.4);
+  box-shadow: 0 12px 28px rgba(1, 6, 12, 0.3);
+}
+
+.admin-button-danger {
+  color: #ffffff;
+  background: linear-gradient(135deg, #dc2626, #7f1d1d);
+  box-shadow: 0 14px 30px rgba(220, 38, 38, 0.28);
+}
+
+.admin-input {
+  min-height: 2.75rem;
+  border-radius: 1rem;
+  border: 1px solid var(--admin-border);
+  background: rgba(20, 20, 46, 0.55);
+  color: var(--admin-text);
+  transition: border-color 250ms ease, box-shadow 250ms ease, background 250ms ease;
+}
+
+.admin-input::placeholder {
+  color: rgba(230, 190, 125, 0.7);
+}
+
+.admin-input:focus {
+  border-color: rgba(230, 190, 125, 0.7);
+  background: rgba(20, 20, 46, 0.95);
+  box-shadow: 0 0 0 4px rgba(230, 190, 125, 0.15);
+  outline: none;
+}
+
+.admin-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.admin-table thead {
+  color: var(--admin-accent);
+  background: linear-gradient(180deg, rgba(13, 40, 64, 0.95), rgba(6, 23, 38, 0.75));
+}
+
+.admin-table tbody tr {
+  transition: transform 250ms ease, background 250ms ease, box-shadow 250ms ease;
+}
+
+.admin-table tbody tr:hover {
+  background: rgba(242, 214, 128, 0.06);
+  box-shadow: inset 3px 0 0 var(--admin-primary);
+}
+
+.admin-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.admin-status-success {
+  color: #27ae60;
+  background: rgba(39, 174, 96, 0.16);
+}
+
+.admin-status-warning {
+  color: #e6be7d;
+  background: rgba(230, 190, 125, 0.16);
+}
+
+.admin-status-danger {
+  color: #fca5a5;
+  background: rgba(220, 38, 38, 0.16);
+}
+
+.admin-status-neutral {
+  color: #cbd5e1;
+  background: rgba(203, 213, 225, 0.12);
+}
+
+.admin-progress {
+  overflow: hidden;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: rgba(242, 214, 128, 0.12);
+}
+
+.admin-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--admin-primary), var(--admin-accent));
+}
+
+.admin-nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: 1rem;
+  color: rgba(242, 214, 128, 0.78);
+  transition: background 250ms ease, color 250ms ease, transform 250ms ease;
+}
+
+.admin-nav-item:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateX(2px);
+}
+
+.admin-nav-item.active {
+  color: var(--navy-deep);
+  background: linear-gradient(135deg, rgba(242, 200, 121, 0.95), rgba(242, 214, 128, 0.55));
+  box-shadow: inset 3px 0 0 var(--admin-accent), 0 12px 24px rgba(0, 0, 0, 0.3);
+}
+
+.admin-modal-backdrop {
+  background: rgba(1, 6, 12, 0.68);
+  backdrop-filter: blur(10px);
+}
+
+/* ===== MODAL FORM FIX ===== */
+
+/* Panel del modal: navy sólido, sin translucidez */
+.admin-modal-backdrop .admin-panel {
+  background: #141426 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: 1px solid rgba(230, 190, 125, 0.18) !important;
+  box-shadow: 0 24px 60px rgba(1, 6, 12, 0.55) !important;
+}
+
+/* Labels dorados y legibles */
+.admin-modal-backdrop label > span,
+.admin-modal-backdrop .text-sm.font-bold {
+  color: #e6be7d !important;
+  font-weight: 700 !important;
+}
+
+/* .admin-kicker dentro del modal */
+.admin-modal-backdrop .admin-kicker {
+  color: #e6be7d !important;
+}
+
+/* Título del modal */
+.admin-modal-backdrop h2 {
+  color: #e0e0e0 !important;
+}
+
+/* ---- Inputs, selects, textareas ---- */
+/* Estilo base: pill redondeado, fondo navy cálido, sin borde visible */
+.admin-modal-backdrop .admin-input,
+.admin-modal-backdrop input.admin-input,
+.admin-modal-backdrop select.admin-input,
+.admin-modal-backdrop textarea.admin-input {
+  background: rgba(6, 23, 38, 0.75) !important;
+  border: 1.5px solid rgba(242, 214, 128, 0.16) !important;
+  border-radius: 999px !important;
+  color: var(--color-text) !important;
+  box-shadow: none !important;
+  transition: border-color 200ms ease, background 200ms ease, box-shadow 200ms ease !important;
+}
+
+/* Placeholder en dorado apagado */
+.admin-modal-backdrop .admin-input::placeholder {
+  color: rgba(191, 158, 96, 0.75) !important;
+}
+
+/* Focus: borde dorado, fondo navy más claro, glow suave */
+.admin-modal-backdrop .admin-input:focus,
+.admin-modal-backdrop input.admin-input:focus,
+.admin-modal-backdrop select.admin-input:focus,
+.admin-modal-backdrop textarea.admin-input:focus {
+  background: rgba(13, 40, 64, 0.95) !important;
+  border-color: rgba(242, 200, 121, 0.65) !important;
+  box-shadow: 0 0 0 3px rgba(242, 200, 121, 0.15) !important;
+  outline: none !important;
+}
+
+/* Textarea: vuelve rectangular con radio menor */
+.admin-modal-backdrop textarea.admin-input {
+  border-radius: 1.25rem !important;
+  resize: vertical;
+  min-height: 7rem;
+}
+
+/* Select: cursor pointer */
+.admin-modal-backdrop select.admin-input {
+  cursor: pointer;
+}
+
+/* File input: pill navy */
+.admin-modal-backdrop input[type="file"].admin-input {
+  border-radius: 999px !important;
+  cursor: pointer;
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
+}
+
+/* Encabezado del modal con separador sutil */
+.admin-modal-backdrop .admin-panel > div:first-child {
+  padding-bottom: 1.25rem;
+  margin-bottom: 0.25rem;
+  border-bottom: 1px solid rgba(242, 214, 128, 0.14);
+}
+
+/* Scrollbar del modal discreta */
+.admin-modal-backdrop .admin-panel::-webkit-scrollbar { width: 5px; }
+.admin-modal-backdrop .admin-panel::-webkit-scrollbar-track { background: rgba(6, 23, 38, 0.6); border-radius: 99px; }
+.admin-modal-backdrop .admin-panel::-webkit-scrollbar-thumb { background: rgba(242, 200, 121, 0.35); border-radius: 99px; }
+.admin-modal-backdrop .admin-panel::-webkit-scrollbar-thumb:hover { background: rgba(242, 200, 121, 0.6); }
+
+/* ---- Formularios inline (fuera de modal, ej. Tables) ---- */
+.admin-panel .admin-input {
+  background: rgba(6, 23, 38, 0.65);
+  border: 1.5px solid rgba(230, 190, 125, 0.16);
+  color: #e0e0e0;
+}
+.admin-panel .admin-input:focus {
+  background: rgba(13, 40, 64, 0.95);
+  border-color: rgba(230, 190, 125, 0.65);
+  box-shadow: 0 0 0 3px rgba(230, 190, 125, 0.15);
+  outline: none;
+}

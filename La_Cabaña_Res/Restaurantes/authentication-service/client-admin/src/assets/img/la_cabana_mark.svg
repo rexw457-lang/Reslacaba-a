@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 170" role="img" aria-labelledby="laCabanaMarkTitle">
+  <title id="laCabanaMarkTitle">La Cabaña</title>
+  <defs>
+    <linearGradient id="lcm-gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F2D680" />
+      <stop offset="55%" stop-color="#F2C879" />
+      <stop offset="100%" stop-color="#BF9E60" />
+    </linearGradient>
+  </defs>
+  <g transform="translate(110 78)" fill="none" stroke="url(#lcm-gold)" stroke-width="6" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M-95 60 L-59 -38 L-23 60" />
+    <path d="M23 60 L59 -38 L95 60" />
+    <path d="M-32 60 C -32 32, -9 32, -9 60" stroke-width="4.6" />
+    <path d="M-15 60 L9 -6 L33 60" stroke-width="4.6" opacity="0.9" />
+    <path d="M-10 6 L9 -14 L28 6" stroke-width="6" />
+    <path d="M-4 6 L-4 60 M22 6 L22 60" stroke-width="5" />
+    <path d="M4 60 L4 42 C 4 37, 14 37, 14 42 L14 60" stroke-width="4.6" />
+    <path d="M17 -2 L17 -14 L23 -14 L23 2" stroke-width="4.6" />
+    <path d="M-95 60 H 95" stroke-width="4" opacity="0.9" />
+  </g>
+</svg>
