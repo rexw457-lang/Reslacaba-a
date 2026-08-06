@@ -101,9 +101,9 @@ const ensureIncludedFreeItemsForOrder = ({ items, existingDeliveredIncludedItems
 const normalizeOrderResponse = (order) => {
     if (!order) return order;
     const response = order.toObject ? order.toObject() : { ...order };
-    if (response.drinkStatus == null) response.drinkStatus = "Pendiente";
-    if (response.kitchenStatus == null) response.kitchenStatus = "Pendiente";
-    if (!response.status) response.status = "Pendiente";
+    response.drinkStatus = normalizeStatus(response.drinkStatus) || "Pendiente";
+    response.kitchenStatus = normalizeStatus(response.kitchenStatus) || "Pendiente";
+    response.status = normalizeStatus(response.status) || "Pendiente";
     // Ensure legacy included items have hideInBebidas set correctly
     if (Array.isArray(response.items)) {
         response.items = response.items.map((it) => {

@@ -524,6 +524,11 @@ body {
   border: 1.5px solid rgba(230, 190, 125, 0.16);
   color: #e0e0e0;
 }
+.admin-panel select.admin-input {
+  position: relative;
+  z-index: 20;
+  appearance: auto;
+}
 .admin-panel .admin-input:focus {
   background: rgba(13, 40, 64, 0.95);
   border-color: rgba(230, 190, 125, 0.65);

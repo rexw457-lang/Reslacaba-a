@@ -28,7 +28,7 @@ const baseItems = [
   { name: 'Pechuga Empanizada o a la Plancha', category: 'Platos Fuertes', price: 45, description: 'Pechuga preparada al estilo del cliente.' },
   { name: 'Ceviche Mixto', category: 'Platos Fuertes', price: 50, description: 'Ceviche mixto refrescante.' },
   { name: 'Ceviche de Camarón', category: 'Platos Fuertes', price: 60, description: 'Ceviche de camarón.' },
-  { name: 'Mojarra Frita (Empanizada o al Vapor)', category: 'Platos Fuertes', price: null, description: 'Mojarra frita según tamaño solicitado.' },
+  { name: 'Mojarra Frita (Empanizada o al Vapor)', category: 'Platos Fuertes', price: 110, description: 'Mojarra frita según tamaño solicitado.' },
   { name: 'Mojarra Frita con Camarones', category: 'Platos Fuertes', price: 150, description: 'Mojarra con camarones.' },
   { name: 'Costillas en Barbacoa', category: 'Platos Fuertes', price: 65, description: 'Costillas en barbacoa.' },
   { name: 'Alitas en Barbacoa o Búfalo', category: 'Platos Fuertes', price: 60, description: 'Alitas al estilo del chef.' },

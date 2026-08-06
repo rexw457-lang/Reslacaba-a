@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { createOrder, getMenuItems, getOrders, getTables, updateOrderStatus, updateOrderSectionStatus, updateOrderItems } from '../services/adminApi.js';
 import { Spinner } from '../features/auth/components/Spinner.jsx';
+import { useAuthStore } from '../features/auth/store/authStore.js';
 import { showError, showSuccess } from '../shared/utils/toast.js';
 import {
   ClipboardDocumentListIcon,
@@ -31,8 +32,17 @@ const formatDayLabel = (value) =>
 const getDayKey = (value) => new Date(value).toLocaleDateString('es-GT');
 const formatCurrency = (value) =>
   new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(Number(value || 0));
-const statusOptions = ['Pendiente', 'Preparando', 'Entregado', 'Cancelado'];
+const statusOptions = ['Pendiente', 'Entregado', 'Cancelado'];
 const COMANDA_TEMPLATE_URL = '/comanda-template.jpg';
+
+const normalizeOrderStatus = (status = '') => {
+  const value = String(status || '').trim().toLowerCase();
+  if (value === 'pendiente') return 'Pendiente';
+  if (['preparando', 'preparacion', 'preparación'].includes(value)) return 'Preparando';
+  if (['entregado', 'completado', 'completada'].includes(value)) return 'Entregado';
+  if (['cancelado', 'cancelada'].includes(value)) return 'Cancelado';
+  return 'Pendiente';
+};
 
 // Coordenadas medidas directamente sobre comanda-template.jpg (688 x 1520 px).
 // El ticket se imprime a 90mm de ancho, así que usamos ese mismo factor de escala
@@ -276,6 +286,12 @@ export const Orders = () => {
     return 'pos';
   }, [location.pathname]);
 
+  const userRole = useAuthStore((state) => state.user?.role);
+  const canEditOrderItems = useMemo(
+    () => ['ADMIN', 'RECEPCION', 'COCINA'].includes(userRole),
+    [userRole],
+  );
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -431,20 +447,12 @@ export const Orders = () => {
   const [editingOrderId, setEditingOrderId] = useState(null);
   const [editingItems, setEditingItems] = useState([]);
   const [editingLoading, setEditingLoading] = useState(false);
+  const [selectedMenuItemId, setSelectedMenuItemId] = useState('');
 
   const openEditor = (order) => {
     setEditingOrderId(order._id);
-    const sourceItems = (order.items || []).filter((it) => !(it.isIncluded && it.hideInBebidas) && (view === 'entregas' ? !it.delivered : true));
-    setEditingItems(sourceItems.map((it) => ({
-      menuItem: it.menuItem?._id || it.menuItem,
-      label: it.label || '',
-      name: it.menuItem?.name || it.label || it.name || '',
-      price: it.price,
-      quantity: it.quantity,
-      observations: it.observations || '',
-      delivered: Boolean(it.delivered),
-      isIncluded: Boolean(it.isIncluded),
-    })));
+    setSelectedMenuItemId('');
+    setEditingItems([]);
   };
 
   const closeEditor = () => {
@@ -485,19 +493,29 @@ export const Orders = () => {
 
     try {
       setEditingLoading(true);
-      // Merge with existing delivered items so we don't remove already delivered entries
       const existing = orders.find((o) => o._id === editingOrderId) || { items: [] };
-      const preserved = (existing.items || []).filter((it) => it.delivered).map((it) => ({
+      const preservedHiddenIncludedItems = (existing.items || []).filter((it) => {
+        if (!it.delivered || !it.isIncluded || !it.hideInBebidas) return false;
+        const editMatch = editingItems.some((edit) => {
+          const editMenuItem = edit.menuItem ? String(edit.menuItem) : '';
+          const existingMenuItem = String(it.menuItem?._id || it.menuItem || '');
+          const editLabel = String(edit.label || '').trim();
+          const existingLabel = String(it.label || '').trim();
+          return editMenuItem && editMenuItem === existingMenuItem && editLabel === existingLabel;
+        });
+        return !editMatch;
+      }).map((it) => ({
         menuItem: it.menuItem?._id || it.menuItem,
         label: it.label || '',
         quantity: it.quantity,
         observations: it.observations || '',
         delivered: true,
-        isIncluded: Boolean(it.isIncluded),
+        isIncluded: true,
         price: it.price,
+        hideInBebidas: Boolean(it.hideInBebidas),
       }));
       const payloadItems = [
-        ...preserved,
+        ...preservedHiddenIncludedItems,
         ...editingItems.map((it) => ({
           menuItem: it.isIncluded ? undefined : it.menuItem,
           label: it.isIncluded ? it.label || it.name : undefined,
@@ -740,25 +758,29 @@ export const Orders = () => {
                     </select>
                   )}
                   {view === 'entregas' && (
-                    <select value={order.status} onChange={(event) => handleStatusChange(order._id, event.target.value)} className='admin-input px-3 py-2 text-sm font-semibold'>
-                      {deliveryStatusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
-                    </select>
+                    <>
+                      <select value={normalizeOrderStatus(order.status)} onChange={(event) => handleStatusChange(order._id, event.target.value)} className='admin-input px-3 py-2 text-sm font-semibold'>
+                        {deliveryStatusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
+                      </select>
+                      <button type='button' onClick={() => printOrder(order)} className='admin-button-secondary px-3 py-2 text-sm'>Imprimir comanda</button>
+                    </>
                   )}
-                  <button type='button' onClick={() => printOrder(order)} className='admin-button-secondary px-3 py-2 text-sm'>Imprimir comanda</button>
-                  <button type='button' onClick={() => openEditor(order)} className='admin-button-secondary px-3 py-2 text-sm'>Editar</button>
+                  {canEditOrderItems && (
+                    <button type='button' onClick={() => openEditor(order)} className='admin-button-secondary px-3 py-2 text-sm'>Editar</button>
+                  )}
                 </div>
               </div>
               <div className='mt-4 space-y-2'>
-                            {order.items?.filter((item) => {
-                              // Exclude included items explicitly hidden (tostadas) everywhere
-                              if (item.isIncluded && item.hideInBebidas) return false;
-                              // In 'bebidas' and 'kitchen' we show only pending items.
-                              // In 'entregas' we must show all items (delivered and pending), except hidden ones.
-                              if (view === 'bebidas') return isDrinkItem(item) && !item.delivered;
-                              if (view === 'kitchen') return !isDrinkItem(item) && !item.delivered;
-                              if (view === 'entregas') return true;
-                              return true;
-                            }).map((item) => (
+                {order.items?.filter((item) => {
+                  // Exclude included items explicitly hidden (tostadas) everywhere
+                  if (item.isIncluded && item.hideInBebidas) return false;
+                  // In 'bebidas' and 'kitchen' we show only pending items.
+                  // In 'entregas' we must show all items (delivered and pending), except hidden ones.
+                  if (view === 'bebidas') return isDrinkItem(item) && !item.delivered;
+                  if (view === 'kitchen') return !isDrinkItem(item) && !item.delivered;
+                  if (view === 'entregas') return true;
+                  return true;
+                }).map((item) => (
                   <div key={`${order._id}-${item.menuItem?._id || item.label || item.menuItem}`} className='rounded-2xl border border-[#e6be7d]/10 bg-[#e6be7d]/20 p-3'>
                     <div className='flex items-center justify-between gap-4'>
                         <div className='flex items-center gap-2'>
@@ -793,8 +815,16 @@ export const Orders = () => {
 
                     <div className='mt-2'>
                       <label className='block text-sm text-[#e6be7d] mb-2'>Agregar platillo</label>
-                      <select onChange={(e) => addMenuItemToEditing(e.target.value)} className='admin-input w-full px-3 py-2 text-sm'>
-                        <option value=''>Elige un platillo</option>
+                      <select value={selectedMenuItemId} onChange={(e) => {
+                        const selectedValue = e.target.value;
+                        if (!selectedValue) {
+                          setSelectedMenuItemId('');
+                          return;
+                        }
+                        addMenuItemToEditing(selectedValue);
+                        setSelectedMenuItemId('');
+                      }} className='admin-input w-full px-3 py-2 text-sm relative z-20'>
+                        <option value='' disabled hidden>Elige un platillo</option>
                         {menuItems.map((m) => <option key={m._id} value={m._id}>{m.name} — {formatCurrency(m.price)}</option>)}
                       </select>
                     </div>
