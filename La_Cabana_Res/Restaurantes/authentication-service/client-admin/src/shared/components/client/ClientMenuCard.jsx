@@ -7,6 +7,22 @@ export const ClientMenuCard = ({ item }) => {
   const open = useCartStore((s) => s.open);
 
   const onAdd = () => {
+    const isMojarra = String(item.name || '').toLowerCase().includes('mojarra frita');
+    if (isMojarra) {
+      const defaultPrice = Number(item.price || 0).toFixed(2);
+      const input = window.prompt('Ingrese precio para este platillo (Q):', defaultPrice);
+      if (input === null) return; // usuario canceló
+      const value = Number(String(input).replace(',', '.'));
+      if (Number.isNaN(value) || value < 0) {
+        window.alert('Precio inválido. Operación cancelada.');
+        return;
+      }
+      const customItem = { ...item, _id: `${item._id}::${Date.now()}`, menuItem: item._id, price: value };
+      addItem(customItem);
+      open();
+      return;
+    }
+
     addItem(item);
     open();
   };

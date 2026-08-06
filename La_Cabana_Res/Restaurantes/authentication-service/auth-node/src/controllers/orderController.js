@@ -182,14 +182,25 @@ export const createOrder = async (req, res) => {
             }
 
             const quantity = Number(item.quantity);
-            const subtotal = menuItem.price * quantity;
+
+            // Allow optional price override coming from client (manual cost entry)
+            let priceToUse = menuItem.price;
+            if (item.price !== undefined && item.price !== null && item.price !== '') {
+                const parsed = Number(item.price);
+                if (!Number.isFinite(parsed) || parsed < 0) {
+                    throw new Error('Precio inválido para uno de los platillos.');
+                }
+                priceToUse = parsed;
+            }
+
+            const subtotal = priceToUse * quantity;
             total += subtotal;
 
             return {
                 menuItem: menuItem._id,
                 menuItemDoc: menuItem,
                 quantity,
-                price: menuItem.price,
+                price: priceToUse,
                 observations: item.observations?.trim() || "",
                 delivered: false,
                 isDrinkItem: isDrinkOrderItem({ menuItem }),
@@ -422,14 +433,24 @@ export const updateOrderItems = async (req, res) => {
                 throw new Error('Uno o más platillos no están disponibles en el catálogo.');
             }
 
-            const subtotal = menuItem.price * quantity;
+            // Allow optional price override when updating items
+            let priceToUse = menuItem.price;
+            if (item.price !== undefined && item.price !== null && item.price !== '') {
+                const parsed = Number(item.price);
+                if (!Number.isFinite(parsed) || parsed < 0) {
+                    throw new Error('Precio inválido para uno de los platillos.');
+                }
+                priceToUse = parsed;
+            }
+
+            const subtotal = priceToUse * quantity;
             total += subtotal;
 
             return {
                 menuItem: menuItem._id,
                 menuItemDoc: menuItem,
                 quantity,
-                price: menuItem.price,
+                price: priceToUse,
                 observations: String(item.observations || '').trim(),
                 delivered: Boolean(item.delivered),
                 isIncluded: false,

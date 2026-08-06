@@ -3,7 +3,7 @@ import { useAuthStore } from '../../features/auth/store/authStore.js';
 
 const axiosAuth = axios.create({
   baseURL: import.meta.env.VITE_AUTH_URL || 'http://127.0.0.1:3000/api',
-  timeout: 5000,
+  timeout: 45000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -11,7 +11,7 @@ const axiosAuth = axios.create({
 
 const axiosAdmin = axios.create({
   baseURL: import.meta.env.VITE_ADMIN_URL || 'http://127.0.0.1:3000',
-  timeout: 5000,
+  timeout: 45000,
   headers: {
     'Content-Type': 'application/json',
   },

@@ -334,24 +334,38 @@ export const Orders = () => {
 
   const addToCart = (menuItem) => {
     setCart((current) => {
-      const existing = current.find((entry) => entry.menuItem === menuItem._id);
-      if (existing) {
-        return current.map((entry) => (entry.menuItem === menuItem._id ? { ...entry, quantity: entry.quantity + 1 } : entry));
+      const isMojarra = String(menuItem.name || '').toLowerCase().includes('mojarra frita');
+      if (isMojarra) {
+        const defaultPrice = menuItem.price ?? 110;
+        const input = window.prompt('Ingrese costo para este platillo (Q):', Number(defaultPrice).toFixed(2));
+        if (input === null) return current;
+        const value = Number(String(input).replace(',', '.'));
+        if (Number.isNaN(value) || value < 0) {
+          window.alert('Precio inválido. Operación cancelada.');
+          return current;
+        }
+        const id = `${menuItem._id}::${Date.now()}`;
+        return [...current, { id, menuItem: menuItem._id, name: menuItem.name, price: value, quantity: 1, observations: '' }];
       }
-      return [...current, { menuItem: menuItem._id, name: menuItem.name, price: menuItem.price, quantity: 1, observations: '' }];
+
+      const existing = current.find((entry) => entry.id === menuItem._id);
+      if (existing) {
+        return current.map((entry) => (entry.id === menuItem._id ? { ...entry, quantity: entry.quantity + 1 } : entry));
+      }
+      return [...current, { id: menuItem._id, menuItem: menuItem._id, name: menuItem.name, price: menuItem.price, quantity: 1, observations: '' }];
     });
   };
 
-  const updateCartQuantity = (menuItemId, delta) => {
+  const updateCartQuantity = (id, delta) => {
     setCart((current) => current.flatMap((entry) => {
-      if (entry.menuItem !== menuItemId) return [entry];
+      if (entry.id !== id) return [entry];
       const nextQuantity = entry.quantity + delta;
       return nextQuantity > 0 ? [{ ...entry, quantity: nextQuantity }] : [];
     }));
   };
 
-  const updateCartNotes = (menuItemId, observations) => {
-    setCart((current) => current.map((entry) => (entry.menuItem === menuItemId ? { ...entry, observations } : entry)));
+  const updateCartNotes = (id, observations) => {
+    setCart((current) => current.map((entry) => (entry.id === id ? { ...entry, observations } : entry)));
   };
 
   const filteredOrders = useMemo(() => {
@@ -563,7 +577,7 @@ export const Orders = () => {
     try {
       const payload = {
         table: selectedTableId,
-        items: cart.map((entry) => ({ menuItem: entry.menuItem, quantity: entry.quantity, observations: entry.observations })),
+        items: cart.map((entry) => ({ menuItem: entry.menuItem, quantity: entry.quantity, observations: entry.observations, price: entry.price })),
         observations: orderObservations,
       };
 
@@ -708,21 +722,21 @@ export const Orders = () => {
             <div className='mt-4 space-y-3'>
               {cart.length === 0 && <p className='rounded-2xl border border-dashed border-[#e6be7d]/20 p-4 text-sm text-[#e6be7d]'>No hay platillos añadidos.</p>}
               {cart.map((entry) => (
-                <div key={entry.menuItem} className='rounded-2xl border border-[#e6be7d]/10 p-3'>
+                <div key={entry.id} className='rounded-2xl border border-[#e6be7d]/10 p-3'>
                   <div className='flex items-center justify-between gap-3'>
                     <div>
                       <p className='font-extrabold text-[#e0e0e0]'>{entry.name}</p>
                       <p className='text-xs text-[#e6be7d]'>{formatCurrency(entry.price)} c/u</p>
                     </div>
                     <div className='flex items-center gap-2'>
-                      <button type='button' onClick={() => updateCartQuantity(entry.menuItem, -1)} className='rounded-full bg-[#e6be7d]/14 p-2 text-[#141426]'><MinusIcon className='h-4 w-4' /></button>
+                      <button type='button' onClick={() => updateCartQuantity(entry.id, -1)} className='rounded-full bg-[#e6be7d]/14 p-2 text-[#141426]'><MinusIcon className='h-4 w-4' /></button>
                       <span className='min-w-8 text-center font-black text-[#e0e0e0]'>{entry.quantity}</span>
-                      <button type='button' onClick={() => updateCartQuantity(entry.menuItem, 1)} className='rounded-full bg-[#e6be7d]/14 p-2 text-[#141426]'><PlusIcon className='h-4 w-4' /></button>
+                      <button type='button' onClick={() => updateCartQuantity(entry.id, 1)} className='rounded-full bg-[#e6be7d]/14 p-2 text-[#141426]'><PlusIcon className='h-4 w-4' /></button>
                     </div>
                   </div>
                   <textarea
                     value={entry.observations}
-                    onChange={(event) => updateCartNotes(entry.menuItem, event.target.value)}
+                    onChange={(event) => updateCartNotes(entry.id, event.target.value)}
                     rows='2'
                     placeholder='Observaciones del platillo'
                     className='admin-input mt-3 w-full px-3 py-2 text-sm'

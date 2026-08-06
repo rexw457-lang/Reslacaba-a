@@ -93,7 +93,7 @@ export const ClientOrdersPage = () => {
 
     const payload = {
       table: tableId,
-      items: items.map((item) => ({ menuItem: item._id, quantity: item.qty || 1 })),
+      items: items.map((item) => ({ menuItem: item.menuItem || item._id, quantity: item.qty || 1 })),
     };
 
     try {
