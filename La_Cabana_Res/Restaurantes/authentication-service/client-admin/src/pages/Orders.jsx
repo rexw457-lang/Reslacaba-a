@@ -63,7 +63,17 @@ const TABLE_LAST_ROW_BOTTOM_PX = TABLE_ROW_LINES_PX[TABLE_ROW_LINES_PX.length - 
 const TABLE_ROW_HEIGHT_PX = (TABLE_LAST_ROW_BOTTOM_PX - TABLE_FIRST_ROW_TOP_PX) / TABLE_ROWS_PRINTED; // ≈ 40.4px promedio (solo se usa si hay más artículos que renglones)
 const TABLE_COLS_PX = { cantidad: [47, 170], descripcion: [170, 502], precio: [502, 640] };
 
-const generateOrderPrintHtml = (order) => {
+// scope controla qué artículos salen en el ticket impreso:
+//  - 'full'    -> comanda completa (todo el pedido), usada en Entregas/Historial
+//  - 'kitchen' -> solo lo que debe preparar cocina (impresora de cocina)
+//  - 'bebidas' -> solo lo que debe preparar recepción/bebidas (impresora de bebidas)
+const PRINT_SCOPE_LABELS = {
+  full: 'Comanda',
+  kitchen: 'Comanda · Cocina',
+  bebidas: 'Comanda · Bebidas',
+};
+
+const generateOrderPrintHtml = (order, scope = 'full') => {
   const createdAt = new Date(order.createdAt);
   const day = createdAt.getDate();
   const month = createdAt.toLocaleDateString('es-GT', { month: 'long' });
@@ -77,7 +87,13 @@ const generateOrderPrintHtml = (order) => {
   const waiter = order.waiter || '';
   const guests = order.guests || '';
 
-  const visibleItems = (order.items || []).filter((item) => !item.isIncluded);
+  const baseVisibleItems = (order.items || []).filter((item) => !item.isIncluded);
+  const visibleItems =
+    scope === 'kitchen'
+      ? baseVisibleItems.filter((item) => !isDrinkItem(item))
+      : scope === 'bebidas'
+        ? baseVisibleItems.filter((item) => isDrinkItem(item))
+        : baseVisibleItems;
 
   // Si hay más artículos que renglones impresos (14), encogemos el alto de fila
   // para que sigan cabiendo antes de la fila de "Total a pagar" (en vez de
@@ -123,7 +139,7 @@ const generateOrderPrintHtml = (order) => {
       <head>
         <meta charset="UTF-8" />
         <base href="${window.location.origin}/" />
-        <title>Comanda ${order.orderNumber || order._id}</title>
+        <title>${PRINT_SCOPE_LABELS[scope] || PRINT_SCOPE_LABELS.full} ${order.orderNumber || order._id}</title>
         <style>
           @page { margin: 0; size: ${PAGE_WIDTH_MM}mm ${PAGE_HEIGHT_MM}mm; }
           html, body { width: ${PAGE_WIDTH_MM}mm; height: ${PAGE_HEIGHT_MM}mm; margin: 0; padding: 0; }
@@ -205,12 +221,35 @@ const generateOrderPrintHtml = (order) => {
   `;
 };
 
-const printOrder = (order) => {
+const printOrder = (order, scope = 'full') => {
   const printWindow = window.open('', '_blank');
-  if (!printWindow) return;
-  printWindow.document.write(generateOrderPrintHtml(order));
+  if (!printWindow) {
+    showError('El navegador bloqueó la ventana de impresión. Habilita las ventanas emergentes para esta página.');
+    return;
+  }
+  printWindow.document.write(generateOrderPrintHtml(order, scope));
   printWindow.document.close();
   printWindow.focus();
+};
+
+// Al confirmar un pedido en la tablet, se manda la comanda a las 2 impresoras
+// físicas: la de cocina (solo platillos de comida) y la de recepción/bebidas
+// (solo bebidas, postres y extras incluidos que correspondan). Cada una abre
+// su propia ventana de impresión; el mesero/host elige la impresora correcta
+// en el diálogo de impresión de cada ventana (o el sistema operativo la tiene
+// configurada como predeterminada en ese equipo/estación).
+const printOrderToStations = (order) => {
+  const hasKitchenItems = getOrderHasKitchen(order);
+  const hasDrinkItems = getOrderHasDrink(order);
+
+  if (hasKitchenItems) {
+    printOrder(order, 'kitchen');
+  }
+  if (hasDrinkItems) {
+    // Pequeño retraso para evitar que el bloqueador de ventanas emergentes
+    // del navegador descarte la segunda ventana al abrirse ambas casi a la vez.
+    setTimeout(() => printOrder(order, 'bebidas'), 150);
+  }
 };
 const partStatusOptions = ['Pendiente', 'Entregado'];
 const deliveryStatusOptions = ['Pendiente', 'Entregado'];
@@ -586,6 +625,8 @@ export const Orders = () => {
       setOrderObservations('');
       setOrders((current) => [created, ...current]);
       showSuccess(`Pedido ${created.orderNumber || created._id?.slice(-6)} registrado`);
+      // Pedido confirmado: se imprime automáticamente en las impresoras de cocina y bebidas.
+      printOrderToStations(created);
     } catch (error) {
       console.error(error);
       showError(error?.response?.data?.error || 'No se pudo registrar el pedido');
@@ -778,21 +819,27 @@ export const Orders = () => {
                 </div>
                 <div className='flex flex-col gap-2'>
                   {view === 'bebidas' && (
-                    <select value={order.drinkStatus} onChange={(event) => handlePartStatusChange(order._id, 'drink', event.target.value)} className='admin-input px-3 py-2 text-sm font-semibold'>
-                      {partStatusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
-                    </select>
+                    <>
+                      <select value={order.drinkStatus} onChange={(event) => handlePartStatusChange(order._id, 'drink', event.target.value)} className='admin-input px-3 py-2 text-sm font-semibold'>
+                        {partStatusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
+                      </select>
+                      <button type='button' onClick={() => printOrder(order, 'bebidas')} className='admin-button-secondary px-3 py-2 text-sm'>Reimprimir bebidas</button>
+                    </>
                   )}
                   {view === 'kitchen' && (
-                    <select value={order.kitchenStatus} onChange={(event) => handlePartStatusChange(order._id, 'kitchen', event.target.value)} className='admin-input px-3 py-2 text-sm font-semibold'>
-                      {partStatusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
-                    </select>
+                    <>
+                      <select value={order.kitchenStatus} onChange={(event) => handlePartStatusChange(order._id, 'kitchen', event.target.value)} className='admin-input px-3 py-2 text-sm font-semibold'>
+                        {partStatusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
+                      </select>
+                      <button type='button' onClick={() => printOrder(order, 'kitchen')} className='admin-button-secondary px-3 py-2 text-sm'>Reimprimir cocina</button>
+                    </>
                   )}
                   {view === 'entregas' && (
                     <>
                       <select value={normalizeOrderStatus(order.status)} onChange={(event) => handleStatusChange(order._id, event.target.value)} className='admin-input px-3 py-2 text-sm font-semibold'>
                         {deliveryStatusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
                       </select>
-                      <button type='button' onClick={() => printOrder(order)} className='admin-button-secondary px-3 py-2 text-sm'>Imprimir comanda</button>
+                      <button type='button' onClick={() => printOrder(order, 'full')} className='admin-button-secondary px-3 py-2 text-sm'>Imprimir comanda completa</button>
                     </>
                   )}
                   {canEditOrderItems && (
@@ -930,7 +977,7 @@ export const Orders = () => {
                           <span className='text-lg font-black text-[#e0e0e0]'>{formatCurrency(order.total)}</span>
                           <span className={`admin-status ${getStatusClass(order.status)}`}>{order.status}</span>
                         </div>
-                        <button type='button' onClick={() => printOrder(order)} className='admin-button-secondary mt-3 px-3 py-2 text-sm'>Imprimir comanda</button>
+                        <button type='button' onClick={() => printOrder(order, 'full')} className='admin-button-secondary mt-3 px-3 py-2 text-sm'>Imprimir comanda completa</button>
                       </div>
                       <p className='mt-4 text-sm text-[#e0e0e0]'>
                         {order.items?.filter((it) => !(it.isIncluded && it.hideInBebidas)).map((item) => `${item.quantity}× ${item.menuItem?.name || item.label || 'Platillo'}`).join(', ')}
