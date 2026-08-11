@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { createOrder, getMenuItems, getOrders, getTables, updateOrderStatus, updateOrderSectionStatus, updateOrderItems, deleteOrder } from '../services/adminApi.js';
+import { createOrder, getMenuItems, getOrders, getTables, updateOrderStatus, updateOrderItems, deleteOrder } from '../services/adminApi.js';
 import { Spinner } from '../features/auth/components/Spinner.jsx';
 import { useAuthStore } from '../features/auth/store/authStore.js';
 import { showError, showSuccess } from '../shared/utils/toast.js';
@@ -45,12 +45,12 @@ const normalizeOrderStatus = (status = '') => {
 };
 
 // Coordenadas medidas directamente sobre comanda-template.jpg (688 x 1520 px).
-// El ticket se imprime a 90mm de ancho, así que usamos ese mismo factor de escala
-// para el alto en vez de forzar 210mm (lo que antes desalineaba todo).
+// El ticket se imprime a 80mm de ancho (ancho real del papel en AON PR-350WF),
+// aplicando el mismo factor de escala para mantener proporciones exactas.
 const TEMPLATE_PX = { width: 688, height: 1520 };
-const PAGE_WIDTH_MM = 90;
+const PAGE_WIDTH_MM = 80;
 const PX_TO_MM = PAGE_WIDTH_MM / TEMPLATE_PX.width;
-const PAGE_HEIGHT_MM = Math.round(TEMPLATE_PX.height * PX_TO_MM * 100) / 100; // ≈ 198.84mm
+const PAGE_HEIGHT_MM = Math.round(TEMPLATE_PX.height * PX_TO_MM * 100) / 100; // ≈ 176.74mm
 const mm = (px) => Math.round(px * PX_TO_MM * 100) / 100;
 
 // Líneas horizontales reales de la tabla de artículos, medidas sobre la plantilla
@@ -90,9 +90,9 @@ const generateOrderPrintHtml = (order, scope = 'full') => {
   const baseVisibleItems = (order.items || []).filter((item) => !item.isIncluded);
   const visibleItems =
     scope === 'kitchen'
-      ? baseVisibleItems.filter((item) => !isDrinkItem(item))
+      ? baseVisibleItems.filter((item) => !isDrinkItem(item) && !item.delivered)
       : scope === 'bebidas'
-        ? baseVisibleItems.filter((item) => isDrinkItem(item))
+        ? baseVisibleItems.filter((item) => isDrinkItem(item) && !item.delivered)
         : baseVisibleItems;
 
   // Si hay más artículos que renglones impresos (14), encogemos el alto de fila
@@ -142,19 +142,19 @@ const generateOrderPrintHtml = (order, scope = 'full') => {
         <title>${PRINT_SCOPE_LABELS[scope] || PRINT_SCOPE_LABELS.full} ${order.orderNumber || order._id}</title>
         <style>
           @page { margin: 0; size: ${PAGE_WIDTH_MM}mm ${PAGE_HEIGHT_MM}mm; }
-          html, body { width: ${PAGE_WIDTH_MM}mm; height: ${PAGE_HEIGHT_MM}mm; margin: 0; padding: 0; }
-          body { font-family: Arial, Helvetica, sans-serif; }
-          .page { position: relative; width: ${PAGE_WIDTH_MM}mm; height: ${PAGE_HEIGHT_MM}mm; }
+          html, body { width: ${PAGE_WIDTH_MM}mm; height: ${PAGE_HEIGHT_MM}mm; margin: 0; padding: 0; background: #fff; }
+          body { font-family: Arial, Helvetica, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .page { position: relative; width: ${PAGE_WIDTH_MM}mm; height: ${PAGE_HEIGHT_MM}mm; background: #fff; }
           .template { position: absolute; inset: 0; width: ${PAGE_WIDTH_MM}mm; height: ${PAGE_HEIGHT_MM}mm; object-fit: fill; }
           .overlay { position: absolute; inset: 0; pointer-events: none; }
           .field { position: absolute; display: flex; flex-direction: column; }
-          .value { font-size: 10px; font-weight: 700; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-          .value.big { font-size: 12px; color: #c00; }
+          .value { font-size: 10px; font-weight: 700; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #000; }
+          .value.big { font-size: 12px; color: #000; font-weight: 900; }
           .value.mask { background: #fff; padding: 2px 1px; }
           .mask-box { position: absolute; background: #fff; }
-          .row-cell { position: absolute; font-weight: 600; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-          .totals-value { position: absolute; font-size: 11px; font-weight: 700; }
-          .observations { position: absolute; left: ${mm(47)}mm; top: ${mm(1240)}mm; width: ${mm(593)}mm; font-size: 8px; }
+          .row-cell { position: absolute; font-weight: 600; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #000; }
+          .totals-value { position: absolute; font-size: 11px; font-weight: 700; color: #000; }
+          .observations { position: absolute; left: ${mm(47)}mm; top: ${mm(1240)}mm; width: ${mm(593)}mm; font-size: 8px; color: #000; }
         </style>
       </head>
       <body>
@@ -251,7 +251,27 @@ const printOrderToStations = (order) => {
     setTimeout(() => printOrder(order, 'bebidas'), 150);
   }
 };
-const partStatusOptions = ['Pendiente', 'Entregado'];
+
+const printPartialOrder = (order, items) => {
+  if (!Array.isArray(items) || items.length === 0) return;
+
+  const partialOrder = {
+    ...order,
+    items,
+    total: items.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.price || 0), 0),
+  };
+
+  const hasKitchenItems = items.some((item) => !isDrinkItem(item));
+  const hasDrinkItems = items.some(isDrinkItem);
+
+  if (hasKitchenItems) {
+    printOrder(partialOrder, 'kitchen');
+  }
+  if (hasDrinkItems) {
+    setTimeout(() => printOrder(partialOrder, 'bebidas'), 150);
+  }
+};
+
 const deliveryStatusOptions = ['Pendiente', 'Entregado'];
 const PAGE_SIZE = 8;
 
@@ -485,17 +505,6 @@ export const Orders = () => {
     }
   };
 
-  const handlePartStatusChange = async (orderId, section, status) => {
-    try {
-      const updated = await updateOrderSectionStatus(orderId, section, status);
-      setOrders((current) => current.map((order) => (order._id === updated._id ? updated : order)));
-      showSuccess('Estado de sección actualizado correctamente');
-    } catch (error) {
-      console.error(error);
-      showError(error?.response?.data?.error || 'No se pudo actualizar el estado de la sección');
-    }
-  };
-
   const handleDeleteOrder = async (orderId) => {
     try {
       await deleteOrder(orderId);
@@ -592,6 +601,9 @@ export const Orders = () => {
       }
       const updated = await updateOrderItems(editingOrderId, payloadItems);
       setOrders((current) => current.map((o) => (o._id === updated._id ? updated : o)));
+      if (editingItems.length) {
+        printPartialOrder(updated, editingItems);
+      }
       showSuccess('Pedido actualizado correctamente');
       closeEditor();
     } catch (error) {
@@ -820,17 +832,13 @@ export const Orders = () => {
                 <div className='flex flex-col gap-2'>
                   {view === 'bebidas' && (
                     <>
-                      <select value={order.drinkStatus} onChange={(event) => handlePartStatusChange(order._id, 'drink', event.target.value)} className='admin-input px-3 py-2 text-sm font-semibold'>
-                        {partStatusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
-                      </select>
+                      <div className='admin-input px-3 py-2 text-sm font-semibold text-[#e0e0e0] bg-[#111827] border border-[#374151] rounded-2xl'>Preparando</div>
                       <button type='button' onClick={() => printOrder(order, 'bebidas')} className='admin-button-secondary px-3 py-2 text-sm'>Reimprimir bebidas</button>
                     </>
                   )}
                   {view === 'kitchen' && (
                     <>
-                      <select value={order.kitchenStatus} onChange={(event) => handlePartStatusChange(order._id, 'kitchen', event.target.value)} className='admin-input px-3 py-2 text-sm font-semibold'>
-                        {partStatusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
-                      </select>
+                      <div className='admin-input px-3 py-2 text-sm font-semibold text-[#e0e0e0] bg-[#111827] border border-[#374151] rounded-2xl'>Preparando</div>
                       <button type='button' onClick={() => printOrder(order, 'kitchen')} className='admin-button-secondary px-3 py-2 text-sm'>Reimprimir cocina</button>
                     </>
                   )}
@@ -842,7 +850,7 @@ export const Orders = () => {
                       <button type='button' onClick={() => printOrder(order, 'full')} className='admin-button-secondary px-3 py-2 text-sm'>Imprimir comanda completa</button>
                     </>
                   )}
-                  {canEditOrderItems && (
+                  {view === 'entregas' && canEditOrderItems && (
                     <button type='button' onClick={() => openEditor(order)} className='admin-button-secondary px-3 py-2 text-sm'>Editar</button>
                   )}
                 </div>
