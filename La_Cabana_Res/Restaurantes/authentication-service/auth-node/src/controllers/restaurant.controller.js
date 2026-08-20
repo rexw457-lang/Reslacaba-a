@@ -17,6 +17,26 @@ const buildRestaurantPayload = async (body, file) => {
         payload.capacity = Number(body.capacity);
     }
 
+    // Configuración de impresión automática ePOS-Print. Solo se incluye en
+    // el payload si viene en el body, para no pisar los valores guardados
+    // cuando el formulario que hace la petición no envía estos campos
+    // (por ejemplo, al editar solo el nombre o la dirección del restaurante).
+    if (body.printerEnabled !== undefined) {
+        payload.printerEnabled = body.printerEnabled === true || body.printerEnabled === "true";
+    }
+    if (body.printerKitchenIp !== undefined) {
+        payload.printerKitchenIp = body.printerKitchenIp?.trim();
+    }
+    if (body.printerKitchenPort !== undefined && body.printerKitchenPort !== "") {
+        payload.printerKitchenPort = Number(body.printerKitchenPort);
+    }
+    if (body.printerDrinksIp !== undefined) {
+        payload.printerDrinksIp = body.printerDrinksIp?.trim();
+    }
+    if (body.printerDrinksPort !== undefined && body.printerDrinksPort !== "") {
+        payload.printerDrinksPort = Number(body.printerDrinksPort);
+    }
+
     if (file?.path) {
         const uploadResult = await cloudinary.uploader.upload(file.path, {
             folder: process.env.CLOUDINARY_FOLDER || "restaurants",

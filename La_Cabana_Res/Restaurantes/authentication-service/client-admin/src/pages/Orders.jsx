@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { createOrder, getMenuItems, getOrders, getTables, updateOrderStatus, updateOrderItems, deleteOrder } from '../services/adminApi.js';
+import { createOrder, getMenuItems, getOrders, getTables, updateOrderStatus, updateOrderItems, deleteOrder, getRestaurants, updateRestaurant } from '../services/adminApi.js';
+import { printToEposStation } from '../services/eposPrint.js';
 import { Spinner } from '../features/auth/components/Spinner.jsx';
 import { useAuthStore } from '../features/auth/store/authStore.js';
 import { showError, showSuccess } from '../shared/utils/toast.js';
@@ -232,27 +233,59 @@ const printOrder = (order, scope = 'full') => {
   printWindow.focus();
 };
 
+// Configuración de impresión automática (ePOS-Print) leída del restaurante.
+// Se llena desde el panel "Configurar impresoras" una vez que las impresoras
+// físicas (Epson TM-T20IV-SP u otra compatible con ePOS-Print) estén
+// conectadas a la red del restaurante con IP fija.
+const isEposReady = (restaurant, station) => {
+  if (!restaurant?.printerEnabled) return false;
+  if (station === 'kitchen') return Boolean(restaurant.printerKitchenIp);
+  if (station === 'bebidas') return Boolean(restaurant.printerDrinksIp);
+  return false;
+};
+
+const getStationConfig = (restaurant, station) =>
+  station === 'kitchen'
+    ? { ip: restaurant?.printerKitchenIp, port: restaurant?.printerKitchenPort || 80 }
+    : { ip: restaurant?.printerDrinksIp, port: restaurant?.printerDrinksPort || 80 };
+
+// Imprime en una estación (cocina o bebidas): si hay una impresora ePOS
+// configurada para esa estación, manda el ticket directo por WiFi/Ethernet
+// sin diálogos. Si no, cae de vuelta al método anterior (window.print()),
+// para que la app siga funcionando aunque todavía no tengas las impresoras.
+const printToStation = async (order, scope, restaurant) => {
+  if (isEposReady(restaurant, scope)) {
+    try {
+      await printToEposStation(order, scope, getStationConfig(restaurant, scope), { isDrinkItem });
+      return;
+    } catch (err) {
+      showError(`No se pudo imprimir en la impresora de ${scope === 'kitchen' ? 'cocina' : 'bebidas'}: ${err.message}`);
+      // Si falla la impresora de red (apagada, IP incorrecta, etc.), seguimos
+      // con el respaldo de window.print() para no perder la comanda.
+    }
+  }
+  printOrder(order, scope);
+};
+
 // Al confirmar un pedido en la tablet, se manda la comanda a las 2 impresoras
 // físicas: la de cocina (solo platillos de comida) y la de recepción/bebidas
-// (solo bebidas, postres y extras incluidos que correspondan). Cada una abre
-// su propia ventana de impresión; el mesero/host elige la impresora correcta
-// en el diálogo de impresión de cada ventana (o el sistema operativo la tiene
-// configurada como predeterminada en ese equipo/estación).
-const printOrderToStations = (order) => {
+// (solo bebidas, postres y extras incluidos que correspondan).
+const printOrderToStations = (order, restaurant) => {
   const hasKitchenItems = getOrderHasKitchen(order);
   const hasDrinkItems = getOrderHasDrink(order);
 
   if (hasKitchenItems) {
-    printOrder(order, 'kitchen');
+    printToStation(order, 'kitchen', restaurant);
   }
   if (hasDrinkItems) {
-    // Pequeño retraso para evitar que el bloqueador de ventanas emergentes
-    // del navegador descarte la segunda ventana al abrirse ambas casi a la vez.
-    setTimeout(() => printOrder(order, 'bebidas'), 150);
+    // Pequeño retraso: evita que el bloqueador de ventanas emergentes del
+    // navegador descarte la segunda ventana (solo aplica al método de
+    // respaldo window.print(); con ePOS-Print no hace falta, pero no estorba).
+    setTimeout(() => printToStation(order, 'bebidas', restaurant), 150);
   }
 };
 
-const printPartialOrder = (order, items) => {
+const printPartialOrder = (order, items, restaurant) => {
   if (!Array.isArray(items) || items.length === 0) return;
 
   const partialOrder = {
@@ -265,10 +298,10 @@ const printPartialOrder = (order, items) => {
   const hasDrinkItems = items.some(isDrinkItem);
 
   if (hasKitchenItems) {
-    printOrder(partialOrder, 'kitchen');
+    printToStation(partialOrder, 'kitchen', restaurant);
   }
   if (hasDrinkItems) {
-    setTimeout(() => printOrder(partialOrder, 'bebidas'), 150);
+    setTimeout(() => printToStation(partialOrder, 'bebidas', restaurant), 150);
   }
 };
 
@@ -336,6 +369,16 @@ export const Orders = () => {
   const [cart, setCart] = useState([]);
   const [orderObservations, setOrderObservations] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [restaurant, setRestaurant] = useState(null);
+  const [showPrinterSettings, setShowPrinterSettings] = useState(false);
+  const [printerForm, setPrinterForm] = useState({
+    printerEnabled: false,
+    printerKitchenIp: '',
+    printerKitchenPort: 80,
+    printerDrinksIp: '',
+    printerDrinksPort: 80,
+  });
+  const [savingPrinterSettings, setSavingPrinterSettings] = useState(false);
 
   const view = useMemo(() => {
     if (location.pathname.includes('bebidas')) return 'bebidas';
@@ -355,12 +398,30 @@ export const Orders = () => {
     const load = async () => {
       try {
         setLoading(true);
-        const [menuData, ordersData, tablesData] = await Promise.all([getMenuItems(), getOrders(), getTables()]);
+        const [menuData, ordersData, tablesData, restaurantsData] = await Promise.all([
+          getMenuItems(),
+          getOrders(),
+          getTables(),
+          getRestaurants(),
+        ]);
         setMenuItems(Array.isArray(menuData) ? menuData : menuData?.menuItems || []);
         setOrders(Array.isArray(ordersData) ? ordersData : []);
         setTables(Array.isArray(tablesData) ? tablesData : []);
         if (!selectedTableId && Array.isArray(tablesData) && tablesData.length > 0) {
           setSelectedTableId(tablesData[0]._id);
+        }
+        // Este panel administra un solo restaurante (La Cabaña), por eso
+        // tomamos el primero. Aquí viven las IPs de las impresoras.
+        const currentRestaurant = Array.isArray(restaurantsData) ? restaurantsData[0] : null;
+        if (currentRestaurant) {
+          setRestaurant(currentRestaurant);
+          setPrinterForm({
+            printerEnabled: Boolean(currentRestaurant.printerEnabled),
+            printerKitchenIp: currentRestaurant.printerKitchenIp || '',
+            printerKitchenPort: currentRestaurant.printerKitchenPort || 80,
+            printerDrinksIp: currentRestaurant.printerDrinksIp || '',
+            printerDrinksPort: currentRestaurant.printerDrinksPort || 80,
+          });
         }
       } catch (error) {
         console.error(error);
@@ -602,7 +663,7 @@ export const Orders = () => {
       const updated = await updateOrderItems(editingOrderId, payloadItems);
       setOrders((current) => current.map((o) => (o._id === updated._id ? updated : o)));
       if (editingItems.length) {
-        printPartialOrder(updated, editingItems);
+        printPartialOrder(updated, editingItems, restaurant);
       }
       showSuccess('Pedido actualizado correctamente');
       closeEditor();
@@ -638,10 +699,34 @@ export const Orders = () => {
       setOrders((current) => [created, ...current]);
       showSuccess(`Pedido ${created.orderNumber || created._id?.slice(-6)} registrado`);
       // Pedido confirmado: se imprime automáticamente en las impresoras de cocina y bebidas.
-      printOrderToStations(created);
+      printOrderToStations(created, restaurant);
     } catch (error) {
       console.error(error);
       showError(error?.response?.data?.error || 'No se pudo registrar el pedido');
+    }
+  };
+
+  const handleSavePrinterSettings = async () => {
+    if (!restaurant?._id) return;
+    try {
+      setSavingPrinterSettings(true);
+      const payload = {
+        printerEnabled: printerForm.printerEnabled,
+        printerKitchenIp: printerForm.printerKitchenIp,
+        printerKitchenPort: printerForm.printerKitchenPort,
+        printerDrinksIp: printerForm.printerDrinksIp,
+        printerDrinksPort: printerForm.printerDrinksPort,
+      };
+      const response = await updateRestaurant(restaurant._id, payload);
+      const updatedRestaurant = response?.restaurant || { ...restaurant, ...payload };
+      setRestaurant(updatedRestaurant);
+      showSuccess('Configuración de impresoras guardada');
+      setShowPrinterSettings(false);
+    } catch (error) {
+      console.error(error);
+      showError(error?.response?.data?.message || 'No se pudo guardar la configuración de impresoras');
+    } finally {
+      setSavingPrinterSettings(false);
     }
   };
 
@@ -675,8 +760,92 @@ export const Orders = () => {
                     : 'Consulta el historial completo del restaurante con filtros por estado.'}
           </p>
         </div>
+        {view === 'pos' && (
+          <button
+            type='button'
+            onClick={() => setShowPrinterSettings(true)}
+            className='admin-button-secondary px-3 py-2 text-sm self-start md:self-auto'
+          >
+            🖨️ Configurar impresoras
+          </button>
+        )}
         {/* Contador de platillos eliminado según petición del usuario */}
       </div>
+
+      {showPrinterSettings && (
+        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4'>
+          <div className='admin-panel w-full max-w-md p-5 space-y-4'>
+            <div>
+              <h2 className='text-lg font-semibold text-[#e0e0e0]'>Configurar impresoras</h2>
+              <p className='text-sm text-[#a0a0a0] mt-1'>
+                Ingresa la IP local de cada impresora Epson (ePOS-Print) una vez que estén conectadas a la red del
+                restaurante. Mientras no las actives aquí, la app sigue usando el diálogo de impresión normal.
+              </p>
+            </div>
+
+            <label className='flex items-center gap-2 text-sm text-[#e0e0e0]'>
+              <input
+                type='checkbox'
+                checked={printerForm.printerEnabled}
+                onChange={(e) => setPrinterForm((prev) => ({ ...prev, printerEnabled: e.target.checked }))}
+              />
+              Activar impresión automática (ePOS-Print)
+            </label>
+
+            <div className='grid grid-cols-2 gap-3'>
+              <div className='col-span-2 text-xs uppercase tracking-wide text-[#a0a0a0]'>Impresora de cocina</div>
+              <input
+                type='text'
+                placeholder='IP, ej. 192.168.1.50'
+                value={printerForm.printerKitchenIp}
+                onChange={(e) => setPrinterForm((prev) => ({ ...prev, printerKitchenIp: e.target.value }))}
+                className='admin-input'
+              />
+              <input
+                type='number'
+                placeholder='Puerto (80)'
+                value={printerForm.printerKitchenPort}
+                onChange={(e) => setPrinterForm((prev) => ({ ...prev, printerKitchenPort: Number(e.target.value) }))}
+                className='admin-input'
+              />
+
+              <div className='col-span-2 text-xs uppercase tracking-wide text-[#a0a0a0] mt-2'>Impresora de bebidas</div>
+              <input
+                type='text'
+                placeholder='IP, ej. 192.168.1.51'
+                value={printerForm.printerDrinksIp}
+                onChange={(e) => setPrinterForm((prev) => ({ ...prev, printerDrinksIp: e.target.value }))}
+                className='admin-input'
+              />
+              <input
+                type='number'
+                placeholder='Puerto (80)'
+                value={printerForm.printerDrinksPort}
+                onChange={(e) => setPrinterForm((prev) => ({ ...prev, printerDrinksPort: Number(e.target.value) }))}
+                className='admin-input'
+              />
+            </div>
+
+            <div className='flex justify-end gap-2 pt-2'>
+              <button
+                type='button'
+                onClick={() => setShowPrinterSettings(false)}
+                className='admin-button-secondary px-3 py-2 text-sm'
+              >
+                Cancelar
+              </button>
+              <button
+                type='button'
+                onClick={handleSavePrinterSettings}
+                disabled={savingPrinterSettings}
+                className='admin-button-primary px-3 py-2 text-sm'
+              >
+                {savingPrinterSettings ? 'Guardando…' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {view === 'pos' && (
         <div className='grid gap-6 xl:grid-cols-[1.15fr_0.85fr]'>
@@ -833,13 +1002,13 @@ export const Orders = () => {
                   {view === 'bebidas' && (
                     <>
                       <div className='admin-input px-3 py-2 text-sm font-semibold text-[#e0e0e0] bg-[#111827] border border-[#374151] rounded-2xl'>Preparando</div>
-                      <button type='button' onClick={() => printOrder(order, 'bebidas')} className='admin-button-secondary px-3 py-2 text-sm'>Reimprimir bebidas</button>
+                      <button type='button' onClick={() => printToStation(order, 'bebidas', restaurant)} className='admin-button-secondary px-3 py-2 text-sm'>Reimprimir bebidas</button>
                     </>
                   )}
                   {view === 'kitchen' && (
                     <>
                       <div className='admin-input px-3 py-2 text-sm font-semibold text-[#e0e0e0] bg-[#111827] border border-[#374151] rounded-2xl'>Preparando</div>
-                      <button type='button' onClick={() => printOrder(order, 'kitchen')} className='admin-button-secondary px-3 py-2 text-sm'>Reimprimir cocina</button>
+                      <button type='button' onClick={() => printToStation(order, 'kitchen', restaurant)} className='admin-button-secondary px-3 py-2 text-sm'>Reimprimir cocina</button>
                     </>
                   )}
                   {view === 'entregas' && (

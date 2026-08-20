@@ -10,6 +10,24 @@ const restaurantSchema = new mongoose.Schema({
     openingHours: String,
     manager: String,
     image: String,
+    // Configuración de impresión automática (ePOS-Print) a las impresoras
+    // térmicas WiFi/Ethernet de cocina y bebidas. Se llenan desde el panel
+    // de "Configurar impresoras" en Orders.jsx una vez que las impresoras
+    // físicas estén conectadas a la red del restaurante.
+    printerEnabled: {
+        type: Boolean,
+        default: false
+    },
+    printerKitchenIp: String,
+    printerKitchenPort: {
+        type: Number,
+        default: 80
+    },
+    printerDrinksIp: String,
+    printerDrinksPort: {
+        type: Number,
+        default: 80
+    },
     isDeleted: {
         type: Boolean,
         default: false
