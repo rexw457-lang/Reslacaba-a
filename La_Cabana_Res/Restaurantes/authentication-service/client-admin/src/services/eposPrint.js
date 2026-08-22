@@ -178,6 +178,15 @@ export const buildTicketCanvas = async (order, scope, { isDrinkItem }) => {
  * por Epson, pero conviene probarlo contra una impresora real antes de
  * confiar en él en producción.
  */
+// NOTA IMPORTANTE (agosto 2026): NO usar ePOSDevice.connect()/createDevice()
+// aquí. Ese método del SDK asume una impresora "inteligente" (TM-i / TM-m30)
+// con servidor WebSocket propio, y además fuerza HTTPS internamente para
+// cualquier puerto distinto de 8008 (protocol = port===8008 ? "http" : "https").
+// La TM-T20IV-SP (y la mayoría de impresoras Epson de red estándar) NO tiene
+// ese servidor WebSocket: solo expone el endpoint HTTP simple de ePOS-Print
+// en el puerto 80/443 (`/cgi-bin/epos/service.cgi`). Por eso usamos la clase
+// CanvasPrint, que manda el ticket por un POST/XHR normal a esa URL, sin pasar
+// por el socket ni por la lógica de puertos de ePOSDevice.
 export const sendCanvasToPrinter = (canvas, { ip, port = 80 }) =>
   new Promise((resolve, reject) => {
     if (!ip) {
@@ -190,42 +199,26 @@ export const sendCanvasToPrinter = (canvas, { ip, port = 80 }) =>
     }
 
     try {
-      const ePosDev = new window.epson.ePOSDevice();
+      const protocol = Number(port) === 443 ? 'https' : 'http';
+      const portSuffix = (protocol === 'http' && Number(port) !== 80) || (protocol === 'https' && Number(port) !== 443)
+        ? `:${port}`
+        : '';
+      const address = `${protocol}://${ip}${portSuffix}/cgi-bin/epos/service.cgi?devid=local_printer&timeout=10000`;
 
-      ePosDev.connect(ip, port, (connectResult) => {
-        if (connectResult !== 'OK' && connectResult !== 'SSL_CONNECT_OK') {
-          reject(new Error(`No se pudo conectar a la impresora ${ip}:${port} (${connectResult})`));
-          return;
+      const printer = new window.epson.CanvasPrint(address);
+
+      printer.onreceive = (res) => {
+        if (res?.success) {
+          resolve(res);
+        } else {
+          reject(new Error(`La impresora ${ip} respondió con error: ${JSON.stringify(res)}`));
         }
+      };
+      printer.onerror = (err) => {
+        reject(new Error(`Error de impresión en ${ip}: ${JSON.stringify(err)}`));
+      };
 
-        ePosDev.createDevice(
-          'local_printer',
-          ePosDev.DEVICE_TYPE_PRINTER,
-          { crypto: false, buffer: false },
-          (printer, createResult) => {
-            if (createResult !== 'OK') {
-              reject(new Error(`No se pudo inicializar la impresora ${ip} (${createResult})`));
-              return;
-            }
-
-            printer.onreceive = (res) => {
-              if (res?.success) {
-                resolve(res);
-              } else {
-                reject(new Error(`La impresora ${ip} respondió con error: ${JSON.stringify(res)}`));
-              }
-            };
-            printer.onerror = (err) => {
-              reject(new Error(`Error de impresión en ${ip}: ${JSON.stringify(err)}`));
-            };
-
-            const ctx = canvas.getContext('2d');
-            printer.addImage(ctx, 0, 0, canvas.width, canvas.height, printer.COLOR_1, printer.MODE_MONO);
-            printer.addCut(printer.CUT_FEED);
-            printer.send();
-          }
-        );
-      });
+      printer.print(canvas, true, printer.MODE_MONO);
     } catch (err) {
       reject(err);
     }
