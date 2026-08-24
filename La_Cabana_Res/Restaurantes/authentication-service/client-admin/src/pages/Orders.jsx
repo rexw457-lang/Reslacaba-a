@@ -2,6 +2,20 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { createOrder, getMenuItems, getOrders, getTables, updateOrderStatus, updateOrderItems, deleteOrder, getRestaurants, updateRestaurant } from '../services/adminApi.js';
 import { printToEposStation } from '../services/eposPrint.js';
+import {
+  TEMPLATE_PX,
+  HEADER_IMAGE_URL,
+  COLS_PX,
+  META_FONT_PX,
+  COLUMNS_HEADER_FONT_PX,
+  ROW_FONT_PX,
+  TOTALS_LABEL_FONT_PX,
+  TOTALS_AMOUNT_FONT_PX,
+  A_PAGAR_LABEL_FONT_PX,
+  A_PAGAR_AMOUNT_FONT_PX,
+  OBSERVATIONS_FONT_PX,
+  buildComandaLayout,
+} from '../services/comandaLayout.js';
 import { Spinner } from '../features/auth/components/Spinner.jsx';
 import { useAuthStore } from '../features/auth/store/authStore.js';
 import { showError, showSuccess } from '../shared/utils/toast.js';
@@ -34,7 +48,6 @@ const getDayKey = (value) => new Date(value).toLocaleDateString('es-GT');
 const formatCurrency = (value) =>
   new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(Number(value || 0));
 const statusOptions = ['Pendiente', 'Entregado', 'Cancelado'];
-const COMANDA_TEMPLATE_URL = '/comanda-template.jpg';
 
 const normalizeOrderStatus = (status = '') => {
   const value = String(status || '').trim().toLowerCase();
@@ -45,24 +58,15 @@ const normalizeOrderStatus = (status = '') => {
   return 'Pendiente';
 };
 
-// Coordenadas medidas directamente sobre comanda-template.jpg (688 x 1520 px).
-// El ticket se imprime a 80mm de ancho (ancho real del papel en AON PR-350WF),
-// aplicando el mismo factor de escala para mantener proporciones exactas.
-const TEMPLATE_PX = { width: 688, height: 1520 };
+// El diseño (medidas, columnas, tamaños de letra) vive en comandaLayout.js y
+// lo comparten esta vista de impresión (window.print()) y la impresión
+// directa a la impresora Epson (eposPrint.js), para que ambas rutas
+// dibujen exactamente el mismo ticket.
+// El ticket se imprime a 80mm de ancho (ancho real del papel en AON PR-350WF);
+// el alto ya NO es fijo: crece según la cantidad de artículos del pedido.
 const PAGE_WIDTH_MM = 80;
 const PX_TO_MM = PAGE_WIDTH_MM / TEMPLATE_PX.width;
-const PAGE_HEIGHT_MM = Math.round(TEMPLATE_PX.height * PX_TO_MM * 100) / 100; // ≈ 176.74mm
 const mm = (px) => Math.round(px * PX_TO_MM * 100) / 100;
-
-// Líneas horizontales reales de la tabla de artículos, medidas sobre la plantilla
-// (no son perfectamente uniformes, por eso se usan las posiciones exactas en vez
-// de un alto de fila promedio, que dejaba texto cruzado por una línea).
-const TABLE_ROW_LINES_PX = [593, 633, 667, 698, 728, 759, 804, 835, 879, 925, 971, 1017, 1063, 1109, 1158];
-const TABLE_ROWS_PRINTED = TABLE_ROW_LINES_PX.length - 1; // 14 renglones
-const TABLE_FIRST_ROW_TOP_PX = TABLE_ROW_LINES_PX[0];
-const TABLE_LAST_ROW_BOTTOM_PX = TABLE_ROW_LINES_PX[TABLE_ROW_LINES_PX.length - 1];
-const TABLE_ROW_HEIGHT_PX = (TABLE_LAST_ROW_BOTTOM_PX - TABLE_FIRST_ROW_TOP_PX) / TABLE_ROWS_PRINTED; // ≈ 40.4px promedio (solo se usa si hay más artículos que renglones)
-const TABLE_COLS_PX = { cantidad: [47, 170], descripcion: [170, 502], precio: [502, 640] };
 
 // scope controla qué artículos salen en el ticket impreso:
 //  - 'full'    -> comanda completa (todo el pedido), usada en Entregas/Historial
@@ -75,65 +79,33 @@ const PRINT_SCOPE_LABELS = {
 };
 
 const generateOrderPrintHtml = (order, scope = 'full') => {
-  const createdAt = new Date(order.createdAt);
-  const day = createdAt.getDate();
-  const month = createdAt.toLocaleDateString('es-GT', { month: 'long' });
-  const year = createdAt.getFullYear();
-  const time = createdAt.toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' });
-  const tableLabel = order?.table?.name?.trim()
-    ? order.table.name
-    : order?.table?.number
-      ? `Mesa ${order.table.number}`
-      : 'Sin mesa';
-  const waiter = order.waiter || '';
-  const guests = order.guests || '';
+  const layout = buildComandaLayout(order, scope, isDrinkItem);
+  const pageHeightMm = mm(layout.pageHeightPx);
+  const colCenterMm = ([left, right]) => mm((left + right) / 2);
 
-  const baseVisibleItems = (order.items || []).filter((item) => !item.isIncluded);
-  const visibleItems =
-    scope === 'kitchen'
-      ? baseVisibleItems.filter((item) => !isDrinkItem(item) && !item.delivered)
-      : scope === 'bebidas'
-        ? baseVisibleItems.filter((item) => isDrinkItem(item) && !item.delivered)
-        : baseVisibleItems;
+  const itemsHtml = layout.itemsEmpty
+    ? `<div class="row-cell" style="top: ${mm(layout.items[0]?.top ?? layout.columnsHeaderTop + 42)}mm; left: ${mm(COLS_PX.producto[0])}mm; font-size: ${ROW_FONT_PX}px; font-weight: 400; text-align: left;">Sin artículos</div>`
+    : layout.items
+        .map(
+          (item) => `
+        <div class="row-cell" style="top: ${mm(item.top)}mm; left: ${colCenterMm(COLS_PX.cantidad) - mm(COLS_PX.cantidad[1] - COLS_PX.cantidad[0]) / 2}mm; width: ${mm(COLS_PX.cantidad[1] - COLS_PX.cantidad[0])}mm; font-size: ${ROW_FONT_PX}px; text-align: center;">${item.quantity}</div>
+        <div class="row-cell" style="top: ${mm(item.top)}mm; left: ${mm(COLS_PX.producto[0])}mm; width: ${mm(COLS_PX.producto[1] - COLS_PX.producto[0])}mm; font-size: ${ROW_FONT_PX}px; font-weight: 700; text-align: left;">${item.name}</div>
+        <div class="row-cell" style="top: ${mm(item.top)}mm; right: ${mm(TEMPLATE_PX.width - COLS_PX.precio[1])}mm; width: ${mm(COLS_PX.precio[1] - COLS_PX.precio[0])}mm; font-size: ${ROW_FONT_PX}px; font-weight: 400; text-align: right;">${item.unitPrice}</div>
+        <div class="row-cell" style="top: ${mm(item.top)}mm; right: ${mm(TEMPLATE_PX.width - COLS_PX.total[1])}mm; width: ${mm(COLS_PX.total[1] - COLS_PX.total[0])}mm; font-size: ${ROW_FONT_PX}px; text-align: right;">${item.total}</div>
+      `
+        )
+        .join('');
 
-  // Si hay más artículos que renglones impresos (14), encogemos el alto de fila
-  // para que sigan cabiendo antes de la fila de "Total a pagar" (en vez de
-  // desbordarse encima de ella). Con 14 o menos, usamos las líneas reales
-  // medidas sobre la plantilla (no perfectamente uniformes) para que el texto
-  // nunca quede cruzado por una línea divisoria.
-  const useRealLines = visibleItems.length <= TABLE_ROWS_PRINTED;
-  const rowHeightPx = Math.min(
-    TABLE_ROW_HEIGHT_PX,
-    visibleItems.length > 0 ? (TABLE_LAST_ROW_BOTTOM_PX - TABLE_FIRST_ROW_TOP_PX) / visibleItems.length : TABLE_ROW_HEIGHT_PX
-  );
-  const rowFontPx = rowHeightPx < 30 ? 7 : 8;
-
-  // Top y alto disponible (en px de plantilla) para el renglón "index".
-  const getRowGeometry = (index) => {
-    if (useRealLines) {
-      const top = TABLE_ROW_LINES_PX[index];
-      const bottom = TABLE_ROW_LINES_PX[index + 1];
-      return { top, height: bottom - top };
-    }
-    const top = TABLE_FIRST_ROW_TOP_PX + index * rowHeightPx;
-    return { top, height: rowHeightPx };
-  };
-
-  const itemsHtml = visibleItems
-    .map((item, index) => {
-      const itemName = item.menuItem?.name || item.label || 'Platillo';
-      const itemTotal = formatCurrency(Number(item.price || 0) * Number(item.quantity || 0));
-      const { top, height } = getRowGeometry(index);
-      const rowTop = mm(top) + Math.min(1.3, mm(height) / 3);
-      return `
-        <div class="row-cell" style="top: ${rowTop}mm; left: ${mm(TABLE_COLS_PX.cantidad[0])}mm; width: ${mm(TABLE_COLS_PX.cantidad[1] - TABLE_COLS_PX.cantidad[0])}mm; font-size: ${rowFontPx}px; text-align: center;">${item.quantity}</div>
-        <div class="row-cell" style="top: ${rowTop}mm; left: ${mm(TABLE_COLS_PX.descripcion[0] + 4)}mm; width: ${mm(TABLE_COLS_PX.descripcion[1] - TABLE_COLS_PX.descripcion[0] - 6)}mm; font-size: ${rowFontPx}px; text-align: left;">${itemName}</div>
-        <div class="row-cell" style="top: ${rowTop}mm; left: ${mm(TABLE_COLS_PX.precio[0])}mm; width: ${mm(TABLE_COLS_PX.precio[1] - TABLE_COLS_PX.precio[0] - 3)}mm; font-size: ${rowFontPx}px; text-align: right;">${itemTotal}</div>
-      `;
-    })
+  const metaHtml = layout.metaRows
+    .map(
+      (row) => `
+      <div class="field" style="top: ${mm(row.top)}mm; left: ${mm(layout.marginX)}mm; right: ${mm(TEMPLATE_PX.width - layout.rightX)}mm; text-align: left;">
+        <span class="value" style="font-size: ${META_FONT_PX}px;">${row.label} ${row.value}</span>
+      </div>`
+    )
     .join('');
 
-  const templateImageUrl = new URL(COMANDA_TEMPLATE_URL, window.location.origin).href;
+  const headerImageUrl = new URL(HEADER_IMAGE_URL, window.location.origin).href;
 
   return `
     <html lang="es">
@@ -142,59 +114,41 @@ const generateOrderPrintHtml = (order, scope = 'full') => {
         <base href="${window.location.origin}/" />
         <title>${PRINT_SCOPE_LABELS[scope] || PRINT_SCOPE_LABELS.full} ${order.orderNumber || order._id}</title>
         <style>
-          @page { margin: 0; size: ${PAGE_WIDTH_MM}mm ${PAGE_HEIGHT_MM}mm; }
-          html, body { width: ${PAGE_WIDTH_MM}mm; height: ${PAGE_HEIGHT_MM}mm; margin: 0; padding: 0; background: #fff; }
+          @page { margin: 0; size: ${PAGE_WIDTH_MM}mm ${pageHeightMm}mm; }
+          html, body { width: ${PAGE_WIDTH_MM}mm; height: ${pageHeightMm}mm; margin: 0; padding: 0; background: #fff; }
           body { font-family: Arial, Helvetica, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .page { position: relative; width: ${PAGE_WIDTH_MM}mm; height: ${PAGE_HEIGHT_MM}mm; background: #fff; }
-          .template { position: absolute; inset: 0; width: ${PAGE_WIDTH_MM}mm; height: ${PAGE_HEIGHT_MM}mm; object-fit: fill; }
+          .page { position: relative; width: ${PAGE_WIDTH_MM}mm; height: ${pageHeightMm}mm; background: #fff; }
+          .header-img { position: absolute; top: 0; left: 0; width: ${PAGE_WIDTH_MM}mm; height: ${mm(layout.headerHeightPx)}mm; object-fit: contain; }
           .overlay { position: absolute; inset: 0; pointer-events: none; }
           .field { position: absolute; display: flex; flex-direction: column; }
-          .value { font-size: 10px; font-weight: 700; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #000; }
-          .value.big { font-size: 12px; color: #000; font-weight: 900; }
-          .value.mask { background: #fff; padding: 2px 1px; }
-          .mask-box { position: absolute; background: #fff; }
-          .row-cell { position: absolute; font-weight: 600; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #000; }
-          .totals-value { position: absolute; font-size: 11px; font-weight: 700; color: #000; }
-          .observations { position: absolute; left: ${mm(47)}mm; top: ${mm(1240)}mm; width: ${mm(593)}mm; font-size: 8px; color: #000; }
+          .value { font-weight: 700; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #000; }
+          .dotted-line { position: absolute; left: ${mm(layout.marginX - 16)}mm; right: ${mm(TEMPLATE_PX.width - layout.rightX - 16)}mm; top: ${mm(layout.dottedLineY)}mm; border-top: 2px dotted #000; }
+          .columns-header { position: absolute; font-weight: 700; font-size: ${COLUMNS_HEADER_FONT_PX}px; color: #000; top: ${mm(layout.columnsHeaderTop)}mm; }
+          .row-cell { position: absolute; font-weight: 700; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #000; }
+          .black-bar { position: absolute; left: 0; right: 0; top: ${mm(layout.blackBarTop)}mm; height: ${mm(layout.blackBarHeight)}mm; background: #000; }
+          .totals-label { position: absolute; font-weight: 700; color: #000; }
+          .totals-value { position: absolute; font-weight: 400; color: #000; }
+          .observations { position: absolute; left: ${mm(layout.marginX)}mm; right: ${mm(TEMPLATE_PX.width - layout.rightX)}mm; top: ${mm(layout.observationsTop)}mm; font-size: ${OBSERVATIONS_FONT_PX}px; font-weight: 700; color: #000; }
         </style>
       </head>
       <body>
         <div class="page">
-          <img src="${templateImageUrl}" class="template" alt="Comanda plantilla" />
+          <img src="${headerImageUrl}" class="header-img" alt="La Cabaña Restaurante" />
           <div class="overlay">
-            <!-- Día / Mes / Año (debajo del encabezado impreso, dentro de su misma celda) -->
-            <div class="field" style="top: ${mm(433)}mm; left: ${mm(48)}mm; width: ${mm(119 - 48)}mm; text-align: center;">
-              <span class="value">${day}</span>
-            </div>
-            <div class="field" style="top: ${mm(433)}mm; left: ${mm(119)}mm; width: ${mm(194 - 119)}mm; text-align: center;">
-              <span class="value">${month}</span>
-            </div>
-            <div class="field" style="top: ${mm(433)}mm; left: ${mm(194)}mm; width: ${mm(257 - 194)}mm; text-align: center;">
-              <span class="value">${year}</span>
-            </div>
-            <!-- Hora: se escribe sobre la línea impresa "Hora:____" -->
-            <div class="field" style="top: ${mm(444)}mm; left: ${mm(257)}mm; width: ${mm(435 - 257)}mm; text-align: center;">
-              <span class="value">${time}</span>
-            </div>
-            <!-- No. de comanda: primero tapamos el placeholder impreso "No.1592" con un rectángulo blanco, luego escribimos el número real encima -->
-            <div class="mask-box" style="top: ${mm(434)}mm; left: ${mm(437)}mm; width: ${mm(640 - 437 - 2)}mm; height: ${mm(483 - 434)}mm;"></div>
-            <div class="field" style="top: ${mm(438)}mm; left: ${mm(435)}mm; width: ${mm(640 - 435)}mm; text-align: center;">
-              <span class="value big">No.${order.orderNumber || order._id}</span>
-            </div>
-            <!-- Mesa / Mesero / Personas: debajo de la etiqueta impresa, dentro de la misma barra gris (484mm-557mm) -->
-            <div class="field" style="top: ${mm(520)}mm; left: ${mm(48 + 4)}mm; width: ${mm(170 - 48 - 6)}mm; text-align: center;">
-              <span class="value" style="font-size: 9px;">${tableLabel}</span>
-            </div>
-            <div class="field" style="top: ${mm(520)}mm; left: ${mm(170 + 4)}mm; width: ${mm(502 - 170 - 8)}mm; text-align: center;">
-              <span class="value" style="font-size: 9px;">${waiter || ''}</span>
-            </div>
-            <div class="field" style="top: ${mm(520)}mm; left: ${mm(502 + 4)}mm; width: ${mm(640 - 502 - 6)}mm; text-align: center;">
-              <span class="value" style="font-size: 9px;">${guests || ''}</span>
-            </div>
-            <!-- Renglones de artículos, alineados con la cuadrícula ya impresa -->
+            ${metaHtml}
+            <div class="dotted-line"></div>
+            <div class="columns-header" style="left: ${mm(COLS_PX.producto[0])}mm; text-align: left;">Producto</div>
+            <div class="columns-header" style="left: ${colCenterMm(COLS_PX.cantidad) - mm(COLS_PX.cantidad[1] - COLS_PX.cantidad[0]) / 2}mm; width: ${mm(COLS_PX.cantidad[1] - COLS_PX.cantidad[0])}mm; text-align: center;">Cantidad</div>
+            <div class="columns-header" style="right: ${mm(TEMPLATE_PX.width - COLS_PX.precio[1])}mm; text-align: right;">Precio (Q)</div>
+            <div class="columns-header" style="right: ${mm(TEMPLATE_PX.width - COLS_PX.total[1])}mm; text-align: right;">Total (Q)</div>
+            <!-- Renglones de artículos -->
             ${itemsHtml}
-            <!-- Total: sobre la línea impresa junto a "Total a pagar Q." -->
-            <div class="totals-value" style="top: ${mm(1170)}mm; left: ${mm(502)}mm; width: ${mm(640 - 502 - 3)}mm; text-align: right;">${formatCurrency(order.total)}</div>
+            <div class="black-bar"></div>
+            <!-- Totales -->
+            <div class="totals-label" style="top: ${mm(layout.totalsTop)}mm; left: ${mm(layout.marginX)}mm; font-size: ${TOTALS_LABEL_FONT_PX}px;">${layout.totalLabel}</div>
+            <div class="totals-value" style="top: ${mm(layout.totalsTop)}mm; left: ${mm(layout.marginX + 70)}mm; width: ${mm(260)}mm; font-size: ${TOTALS_AMOUNT_FONT_PX}px; text-align: right;">${layout.totalValue}</div>
+            <div class="totals-label" style="top: ${mm(layout.totalsTop)}mm; left: ${mm(430)}mm; font-size: ${A_PAGAR_LABEL_FONT_PX}px;">${layout.aPagarLabel}</div>
+            <div class="totals-value" style="top: ${mm(layout.totalsTop + 26)}mm; right: ${mm(TEMPLATE_PX.width - layout.rightX)}mm; width: ${mm(220)}mm; font-size: ${A_PAGAR_AMOUNT_FONT_PX}px; font-weight: 900; text-align: right;">${layout.aPagarValue}</div>
             ${order.observations ? `<div class="observations"><strong>Observaciones:</strong> ${order.observations}</div>` : ''}
           </div>
         </div>

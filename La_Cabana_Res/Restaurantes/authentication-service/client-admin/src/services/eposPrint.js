@@ -3,7 +3,7 @@
 // Cómo funciona:
 //   1. Dibujamos la comanda en un <canvas> oculto, con el mismo diseño y las
 //      mismas coordenadas que ya usa `generateOrderPrintHtml` en Orders.jsx
-//      (misma plantilla comanda-template.jpg, mismas posiciones de texto).
+//      (mismo layout definido en comandaLayout.js, mismas posiciones de texto).
 //   2. Le pasamos ese canvas al SDK de Epson (epos-2.x.js), que lo convierte
 //      a formato de imagen para la impresora y lo manda por HTTP directo a
 //      la IP de la impresora en la red local — sin pasar por el diálogo de
@@ -22,146 +22,148 @@
 // impresoras), estas funciones fallan de forma controlada y Orders.jsx cae
 // de vuelta al método anterior (window.print()).
 
-const TEMPLATE_PX = { width: 688, height: 1520 };
-const COMANDA_TEMPLATE_URL = '/comanda-template.jpg';
+import {
+  TEMPLATE_PX,
+  HEADER_IMAGE_URL,
+  COLS_PX,
+  META_FONT_PX,
+  COLUMNS_HEADER_FONT_PX,
+  ROW_FONT_PX,
+  TOTALS_LABEL_FONT_PX,
+  TOTALS_AMOUNT_FONT_PX,
+  A_PAGAR_LABEL_FONT_PX,
+  A_PAGAR_AMOUNT_FONT_PX,
+  OBSERVATIONS_FONT_PX,
+  buildComandaLayout,
+} from './comandaLayout.js';
 
-const TABLE_ROW_LINES_PX = [593, 633, 667, 698, 728, 759, 804, 835, 879, 925, 971, 1017, 1063, 1109, 1158];
-const TABLE_ROWS_PRINTED = TABLE_ROW_LINES_PX.length - 1;
-const TABLE_FIRST_ROW_TOP_PX = TABLE_ROW_LINES_PX[0];
-const TABLE_LAST_ROW_BOTTOM_PX = TABLE_ROW_LINES_PX[TABLE_ROW_LINES_PX.length - 1];
-const TABLE_ROW_HEIGHT_PX = (TABLE_LAST_ROW_BOTTOM_PX - TABLE_FIRST_ROW_TOP_PX) / TABLE_ROWS_PRINTED;
-const TABLE_COLS_PX = { cantidad: [47, 170], descripcion: [170, 502], precio: [502, 640] };
-
-const formatCurrency = (value) =>
-  new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(Number(value || 0));
-
-let cachedTemplateImage = null;
-const loadTemplateImage = () =>
+let cachedHeaderImage = null;
+const loadHeaderImage = () =>
   new Promise((resolve, reject) => {
-    if (cachedTemplateImage) return resolve(cachedTemplateImage);
+    if (cachedHeaderImage) return resolve(cachedHeaderImage);
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
-      cachedTemplateImage = img;
+      cachedHeaderImage = img;
       resolve(img);
     };
     img.onerror = reject;
-    img.src = COMANDA_TEMPLATE_URL;
+    img.src = HEADER_IMAGE_URL;
   });
 
+/** Reparte `text` en varias líneas de máximo `maxWidth` px, para el canvas. */
+const wrapText = (ctx, text, maxWidth) => {
+  const words = String(text).split(' ');
+  const lines = [];
+  let current = '';
+  words.forEach((word) => {
+    const attempt = current ? `${current} ${word}` : word;
+    if (ctx.measureText(attempt).width > maxWidth && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = attempt;
+    }
+  });
+  if (current) lines.push(current);
+  return lines;
+};
+
 /**
- * Dibuja la comanda (mismo diseño que la versión impresa por window.print())
- * en un canvas y lo devuelve listo para mandarlo a la impresora.
+ * Dibuja la comanda (mismo diseño limpio que la versión impresa por
+ * window.print() en Orders.jsx) en un canvas y lo devuelve listo para
+ * mandarlo a la impresora.
  */
 export const buildTicketCanvas = async (order, scope, { isDrinkItem }) => {
-  const template = await loadTemplateImage();
+  const header = await loadHeaderImage();
+  const layout = buildComandaLayout(order, scope, isDrinkItem);
 
   const canvas = document.createElement('canvas');
   canvas.width = TEMPLATE_PX.width;
-  canvas.height = TEMPLATE_PX.height;
+  canvas.height = layout.pageHeightPx;
   const ctx = canvas.getContext('2d');
 
-  // Fondo blanco + plantilla de la comanda
+  // Fondo blanco + header de marca (logo + nombre del restaurante)
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(template, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(header, 0, 0, canvas.width, layout.headerHeightPx);
 
   ctx.fillStyle = '#000000';
   ctx.textBaseline = 'top';
 
-  const drawCentered = (text, left, width, top, fontPx = 10, bold = true) => {
+  const drawText = (text, x, y, { fontPx = 12, bold = true, align = 'left' } = {}) => {
     ctx.font = `${bold ? '700' : '400'} ${fontPx}px Arial`;
-    ctx.textAlign = 'center';
-    ctx.fillText(String(text ?? ''), left + width / 2, top, width);
+    ctx.textAlign = align;
+    ctx.fillText(String(text ?? ''), x, y);
   };
-  const drawLeft = (text, left, width, top, fontPx = 8, bold = true) => {
-    ctx.font = `${bold ? '600' : '400'} ${fontPx}px Arial`;
-    ctx.textAlign = 'left';
-    ctx.fillText(String(text ?? ''), left, top, width);
-  };
-  const drawRight = (text, left, width, top, fontPx = 8, bold = true) => {
-    ctx.font = `${bold ? '600' : '400'} ${fontPx}px Arial`;
-    ctx.textAlign = 'right';
-    ctx.fillText(String(text ?? ''), left + width, top, width);
-  };
+  const colCenter = ([left, right]) => (left + right) / 2;
 
-  const createdAt = new Date(order.createdAt);
-  const day = createdAt.getDate();
-  const month = createdAt.toLocaleDateString('es-GT', { month: 'long' });
-  const year = createdAt.getFullYear();
-  const time = createdAt.toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' });
-  const tableLabel = order?.table?.name?.trim()
-    ? order.table.name
-    : order?.table?.number
-      ? `Mesa ${order.table.number}`
-      : 'Sin mesa';
-
-  // Día / Mes / Año / Hora
-  drawCentered(day, 48, 119 - 48, 433);
-  drawCentered(month, 119, 194 - 119, 433);
-  drawCentered(year, 194, 257 - 194, 433);
-  drawCentered(time, 257, 435 - 257, 444);
-
-  // No. de comanda (tapamos el placeholder impreso con un rectángulo blanco)
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(437, 434, 640 - 437 - 2, 483 - 434);
-  ctx.fillStyle = '#000000';
-  drawCentered(`No.${order.orderNumber || order._id}`, 435, 640 - 435, 438, 13, true);
-
-  // Mesa / Mesero / Personas
-  drawCentered(tableLabel, 48 + 4, 170 - 48 - 6, 520, 9);
-  drawCentered(order.waiter || '', 170 + 4, 502 - 170 - 8, 520, 9);
-  drawCentered(order.guests || '', 502 + 4, 640 - 502 - 6, 520, 9);
-
-  // Artículos (filtrados según la estación: cocina o bebidas)
-  const baseVisibleItems = (order.items || []).filter((item) => !item.isIncluded);
-  const visibleItems =
-    scope === 'kitchen'
-      ? baseVisibleItems.filter((item) => !isDrinkItem(item) && !item.delivered)
-      : scope === 'bebidas'
-        ? baseVisibleItems.filter((item) => isDrinkItem(item) && !item.delivered)
-        : baseVisibleItems;
-
-  const useRealLines = visibleItems.length <= TABLE_ROWS_PRINTED;
-  const rowHeightPx = Math.min(
-    TABLE_ROW_HEIGHT_PX,
-    visibleItems.length > 0 ? (TABLE_LAST_ROW_BOTTOM_PX - TABLE_FIRST_ROW_TOP_PX) / visibleItems.length : TABLE_ROW_HEIGHT_PX
-  );
-  const rowFontPx = rowHeightPx < 30 ? 7 : 8;
-
-  const getRowGeometry = (index) => {
-    if (useRealLines) {
-      const top = TABLE_ROW_LINES_PX[index];
-      const bottom = TABLE_ROW_LINES_PX[index + 1];
-      return { top, height: bottom - top };
-    }
-    const top = TABLE_FIRST_ROW_TOP_PX + index * rowHeightPx;
-    return { top, height: rowHeightPx };
-  };
-
-  visibleItems.forEach((item, index) => {
-    const itemName = item.menuItem?.name || item.label || 'Platillo';
-    const itemTotal = formatCurrency(Number(item.price || 0) * Number(item.quantity || 0));
-    const { top, height } = getRowGeometry(index);
-    const rowTop = top + Math.min(11, height / 3);
-
-    drawCentered(item.quantity, TABLE_COLS_PX.cantidad[0], TABLE_COLS_PX.cantidad[1] - TABLE_COLS_PX.cantidad[0], rowTop, rowFontPx);
-    drawLeft(
-      itemName,
-      TABLE_COLS_PX.descripcion[0] + 4,
-      TABLE_COLS_PX.descripcion[1] - TABLE_COLS_PX.descripcion[0] - 6,
-      rowTop,
-      rowFontPx
-    );
-    drawRight(itemTotal, TABLE_COLS_PX.precio[0], TABLE_COLS_PX.precio[1] - TABLE_COLS_PX.precio[0] - 3, rowTop, rowFontPx);
+  // Mesero / No. Pedido / Fecha / Mesa
+  layout.metaRows.forEach((row) => {
+    drawText(`${row.label} ${row.value}`, layout.marginX, row.top, { fontPx: META_FONT_PX });
   });
 
-  // Total
-  drawRight(formatCurrency(order.total), 502, 640 - 502 - 3, 1170, 11);
+  // Separador punteado
+  ctx.save();
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([4, 5]);
+  ctx.beginPath();
+  ctx.moveTo(layout.marginX - 16, layout.dottedLineY);
+  ctx.lineTo(layout.rightX + 16, layout.dottedLineY);
+  ctx.stroke();
+  ctx.restore();
 
-  // Observaciones
-  if (order.observations) {
-    drawLeft(`Observaciones: ${order.observations}`, 47, 593, 1240, 8);
+  // Encabezado de columnas
+  drawText('Producto', COLS_PX.producto[0], layout.columnsHeaderTop, { fontPx: COLUMNS_HEADER_FONT_PX, align: 'left' });
+  drawText('Cantidad', colCenter(COLS_PX.cantidad), layout.columnsHeaderTop, { fontPx: COLUMNS_HEADER_FONT_PX, align: 'center' });
+  drawText('Precio (Q)', COLS_PX.precio[1], layout.columnsHeaderTop, { fontPx: COLUMNS_HEADER_FONT_PX, align: 'right' });
+  drawText('Total (Q)', COLS_PX.total[1], layout.columnsHeaderTop, { fontPx: COLUMNS_HEADER_FONT_PX, align: 'right' });
+
+  // Artículos
+  if (layout.itemsEmpty) {
+    drawText('Sin artículos', COLS_PX.producto[0], layout.items[0]?.top ?? layout.columnsHeaderTop + 42, {
+      fontPx: ROW_FONT_PX,
+      bold: false,
+    });
+  } else {
+    layout.items.forEach((item) => {
+      drawText(item.quantity, colCenter(COLS_PX.cantidad), item.top, { fontPx: ROW_FONT_PX, align: 'center' });
+      drawText(item.name, COLS_PX.producto[0], item.top, {
+        fontPx: ROW_FONT_PX,
+        align: 'left',
+        bold: true,
+      });
+      drawText(item.unitPrice, COLS_PX.precio[1], item.top, { fontPx: ROW_FONT_PX, align: 'right', bold: false });
+      drawText(item.total, COLS_PX.total[1], item.top, { fontPx: ROW_FONT_PX, align: 'right' });
+    });
+  }
+
+  // Barra separadora gruesa
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, layout.blackBarTop, canvas.width, layout.blackBarHeight);
+
+  // Totales (Total + A pagar, sin descuento)
+  drawText(layout.totalLabel, layout.marginX, layout.totalsTop, { fontPx: TOTALS_LABEL_FONT_PX });
+  drawText(layout.totalValue, 400, layout.totalsTop, { fontPx: TOTALS_AMOUNT_FONT_PX, align: 'right', bold: false });
+
+  drawText(layout.aPagarLabel, 430, layout.totalsTop, { fontPx: A_PAGAR_LABEL_FONT_PX });
+  drawText(layout.aPagarValue, layout.rightX, layout.totalsTop + 30, {
+    fontPx: A_PAGAR_AMOUNT_FONT_PX,
+    align: 'right',
+  });
+
+  // Observaciones (con salto de línea si no caben en una sola)
+  if (layout.observations) {
+    ctx.font = `700 ${OBSERVATIONS_FONT_PX}px Arial`;
+    const maxWidth = layout.rightX - layout.marginX;
+    const lines = wrapText(ctx, `Observaciones: ${layout.observations}`, maxWidth);
+    lines.forEach((line, index) => {
+      drawText(line, layout.marginX, layout.observationsTop + index * (OBSERVATIONS_FONT_PX + 5), {
+        fontPx: OBSERVATIONS_FONT_PX,
+        align: 'left',
+      });
+    });
   }
 
   return canvas;
