@@ -34,6 +34,8 @@ import {
   A_PAGAR_LABEL_FONT_PX,
   A_PAGAR_AMOUNT_FONT_PX,
   OBSERVATIONS_FONT_PX,
+  TOTAL_VALUE_RIGHT_PX,
+  A_PAGAR_LABEL_LEFT_PX,
   buildComandaLayout,
 } from './comandaLayout.js';
 
@@ -145,9 +147,9 @@ export const buildTicketCanvas = async (order, scope, { isDrinkItem }) => {
 
   // Totales (Total + A pagar, sin descuento)
   drawText(layout.totalLabel, layout.marginX, layout.totalsTop, { fontPx: TOTALS_LABEL_FONT_PX });
-  drawText(layout.totalValue, 400, layout.totalsTop, { fontPx: TOTALS_AMOUNT_FONT_PX, align: 'right', bold: false });
+  drawText(layout.totalValue, TOTAL_VALUE_RIGHT_PX, layout.totalsTop, { fontPx: TOTALS_AMOUNT_FONT_PX, align: 'right', bold: false });
 
-  drawText(layout.aPagarLabel, 430, layout.totalsTop, { fontPx: A_PAGAR_LABEL_FONT_PX });
+  drawText(layout.aPagarLabel, A_PAGAR_LABEL_LEFT_PX, layout.totalsTop, { fontPx: A_PAGAR_LABEL_FONT_PX });
   drawText(layout.aPagarValue, layout.rightX, layout.totalsTop + 30, {
     fontPx: A_PAGAR_AMOUNT_FONT_PX,
     align: 'right',
@@ -200,10 +202,15 @@ export const buildTicketCanvas = async (order, scope, { isDrinkItem }) => {
 const PRINTER_MAX_WIDTH_PX = 576;
 
 /**
- * Si el canvas viene más ancho que lo que la impresora puede imprimir
- * (TEMPLATE_PX.width = 688 > 576), lo reescala manteniendo proporción a un
- * nuevo canvas de máximo PRINTER_MAX_WIDTH_PX de ancho. Si ya cabe, lo
- * regresa tal cual.
+ * Red de seguridad: si el canvas viniera más ancho que lo que la impresora
+ * puede imprimir, lo reescala manteniendo proporción a PRINTER_MAX_WIDTH_PX.
+ * En condiciones normales esto ya NO debería ejecutarse: `comandaLayout.js`
+ * dibuja el ticket directamente a TEMPLATE_PX.width = 576 (== este mismo
+ * límite), así el texto se dibuja una sola vez a su tamaño final y no se
+ * reescala/difumina después de rasterizado (que era la causa de las letras
+ * borrosas en el ticket impreso). Si en el futuro cambia TEMPLATE_PX.width,
+ * este reescalado sigue funcionando como respaldo, pero solo como último
+ * recurso: siempre es preferible que el layout ya venga al ancho correcto.
  */
 const scaleCanvasForPrinter = (canvas, maxWidth = PRINTER_MAX_WIDTH_PX) => {
   if (canvas.width <= maxWidth) return canvas;

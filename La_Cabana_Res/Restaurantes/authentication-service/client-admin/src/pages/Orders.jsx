@@ -14,6 +14,10 @@ import {
   A_PAGAR_LABEL_FONT_PX,
   A_PAGAR_AMOUNT_FONT_PX,
   OBSERVATIONS_FONT_PX,
+  TOTAL_VALUE_LEFT_PX,
+  TOTAL_VALUE_WIDTH_PX,
+  A_PAGAR_LABEL_LEFT_PX,
+  A_PAGAR_VALUE_WIDTH_PX,
   buildComandaLayout,
 } from '../services/comandaLayout.js';
 import { Spinner } from '../features/auth/components/Spinner.jsx';
@@ -146,9 +150,9 @@ const generateOrderPrintHtml = (order, scope = 'full') => {
             <div class="black-bar"></div>
             <!-- Totales -->
             <div class="totals-label" style="top: ${mm(layout.totalsTop)}mm; left: ${mm(layout.marginX)}mm; font-size: ${TOTALS_LABEL_FONT_PX}px;">${layout.totalLabel}</div>
-            <div class="totals-value" style="top: ${mm(layout.totalsTop)}mm; left: ${mm(layout.marginX + 70)}mm; width: ${mm(260)}mm; font-size: ${TOTALS_AMOUNT_FONT_PX}px; text-align: right;">${layout.totalValue}</div>
-            <div class="totals-label" style="top: ${mm(layout.totalsTop)}mm; left: ${mm(430)}mm; font-size: ${A_PAGAR_LABEL_FONT_PX}px;">${layout.aPagarLabel}</div>
-            <div class="totals-value" style="top: ${mm(layout.totalsTop + 26)}mm; right: ${mm(TEMPLATE_PX.width - layout.rightX)}mm; width: ${mm(220)}mm; font-size: ${A_PAGAR_AMOUNT_FONT_PX}px; font-weight: 900; text-align: right;">${layout.aPagarValue}</div>
+            <div class="totals-value" style="top: ${mm(layout.totalsTop)}mm; left: ${mm(TOTAL_VALUE_LEFT_PX)}mm; width: ${mm(TOTAL_VALUE_WIDTH_PX)}mm; font-size: ${TOTALS_AMOUNT_FONT_PX}px; text-align: right;">${layout.totalValue}</div>
+            <div class="totals-label" style="top: ${mm(layout.totalsTop)}mm; left: ${mm(A_PAGAR_LABEL_LEFT_PX)}mm; font-size: ${A_PAGAR_LABEL_FONT_PX}px;">${layout.aPagarLabel}</div>
+            <div class="totals-value" style="top: ${mm(layout.totalsTop + 30)}mm; right: ${mm(TEMPLATE_PX.width - layout.rightX)}mm; width: ${mm(A_PAGAR_VALUE_WIDTH_PX)}mm; font-size: ${A_PAGAR_AMOUNT_FONT_PX}px; font-weight: 900; text-align: right;">${layout.aPagarValue}</div>
             ${order.observations ? `<div class="observations"><strong>Observaciones:</strong> ${order.observations}</div>` : ''}
           </div>
         </div>
