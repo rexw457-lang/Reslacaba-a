@@ -187,6 +187,42 @@ export const buildTicketCanvas = async (order, scope, { isDrinkItem }) => {
 // en el puerto 80/443 (`/cgi-bin/epos/service.cgi`). Por eso usamos la clase
 // CanvasPrint, que manda el ticket por un POST/XHR normal a esa URL, sin pasar
 // por el socket ni por la lógica de puertos de ePOSDevice.
+// Ancho máximo imprimible de la TM-T20IV-SP con papel de 80mm: 576 puntos
+// (48 columnas x 12pt = 576, o 64 columnas x 9pt = 576 — confirmado por la
+// hoja de especificaciones de Epson). Cualquier imagen más ancha que esto
+// no cabe en el cabezal de impresión: la impresora responde success="true"
+// (la petición SOAP es válida) pero no imprime nada físico, porque el
+// firmware no puede colocar el raster fuera del ancho del papel.
+// Epson además recomienda que el ancho sea múltiplo de 8 para impresión
+// rápida — 576 ya lo es.
+const PRINTER_MAX_WIDTH_PX = 576;
+
+/**
+ * Si el canvas viene más ancho que lo que la impresora puede imprimir
+ * (TEMPLATE_PX.width = 688 > 576), lo reescala manteniendo proporción a un
+ * nuevo canvas de máximo PRINTER_MAX_WIDTH_PX de ancho. Si ya cabe, lo
+ * regresa tal cual.
+ */
+const scaleCanvasForPrinter = (canvas, maxWidth = PRINTER_MAX_WIDTH_PX) => {
+  if (canvas.width <= maxWidth) return canvas;
+
+  const scale = maxWidth / canvas.width;
+  const scaledWidth = maxWidth;
+  // Alto también debe quedar en un entero; no hace falta que sea múltiplo de 8.
+  const scaledHeight = Math.round(canvas.height * scale);
+
+  const scaledCanvas = document.createElement('canvas');
+  scaledCanvas.width = scaledWidth;
+  scaledCanvas.height = scaledHeight;
+  const ctx = scaledCanvas.getContext('2d');
+  // Suaviza el reescalado para que el texto no quede pixelado/ilegible.
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(canvas, 0, 0, scaledWidth, scaledHeight);
+
+  return scaledCanvas;
+};
+
 export const sendCanvasToPrinter = (canvas, { ip, port = 80 }) =>
   new Promise((resolve, reject) => {
     if (!ip) {
@@ -218,7 +254,8 @@ export const sendCanvasToPrinter = (canvas, { ip, port = 80 }) =>
         reject(new Error(`Error de impresión en ${ip}: ${JSON.stringify(err)}`));
       };
 
-      printer.print(canvas, true, printer.MODE_MONO);
+      const printableCanvas = scaleCanvasForPrinter(canvas);
+      printer.print(printableCanvas, true, printer.MODE_MONO);
     } catch (err) {
       reject(err);
     }
