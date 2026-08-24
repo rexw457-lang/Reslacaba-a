@@ -254,8 +254,37 @@ export const sendCanvasToPrinter = (canvas, { ip, port = 80 }) =>
         reject(new Error(`Error de impresión en ${ip}: ${JSON.stringify(err)}`));
       };
 
+      // ⚠️ NO usar printer.print(canvas, cut, mode) aquí.
+      // El SDK oficial de Epson (epos-2.27.0.js) tiene un bug: print() arma
+      // bien el XML internamente (texto + imagen + corte) pero al final
+      // llama a this.send(printjobid) con un solo argumento. Como
+      // printjobid casi siempre es undefined, ePOSPrint.prototype.send()
+      // interpreta eso como "mándame un ticket de estado vacío" (una rama
+      // de código pensada para consultas de estado, no para imprimir) y
+      // descarta todo el contenido armado, mandando un
+      // <epos-print></epos-print> vacío a la impresora. La impresora
+      // responde success="true" porque el XML es válido, pero no hay nada
+      // que imprimir. Confirmado ejecutando el SDK real con un canvas de
+      // prueba: print() manda 217 caracteres vacíos; el workaround de abajo
+      // manda el XML completo (~120KB) con la imagen adentro.
+      //
+      // El workaround: replicamos manualmente lo que hace print() por
+      // dentro, pero llamamos a send() pasándole el XML YA ARMADO como
+      // string. Esto evita la rama rota, porque send() detecta que el
+      // primer argumento ya empieza con "<epos" y lo manda tal cual.
       const printableCanvas = scaleCanvasForPrinter(canvas);
-      printer.print(printableCanvas, true, printer.MODE_MONO);
+      printer.addTextAlign(printer.align);
+      printer.addImage(
+        printableCanvas.getContext('2d'),
+        0,
+        0,
+        printableCanvas.width,
+        printableCanvas.height,
+        printer.color,
+        printer.MODE_MONO
+      );
+      printer.addCut(printer.CUT_FEED);
+      printer.send(printer.toString());
     } catch (err) {
       reject(err);
     }
