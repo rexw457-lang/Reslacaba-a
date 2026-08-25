@@ -23,6 +23,7 @@ import {
 import { Spinner } from '../features/auth/components/Spinner.jsx';
 import { useAuthStore } from '../features/auth/store/authStore.js';
 import { showError, showSuccess } from '../shared/utils/toast.js';
+import { askPrompt } from '../shared/utils/uiPrompt.js';
 import {
   ClipboardDocumentListIcon,
   FunnelIcon,
@@ -436,39 +437,43 @@ export const Orders = () => {
     [menuItems, selectedCategory],
   );
 
-  const addToCart = (menuItem) => {
-    let added = false;
+  const addToCart = async (menuItem) => {
+    // Nota: window.prompt()/window.alert() no se muestran dentro del
+    // WebView de Android que empaqueta el APK (se resuelven como null en
+    // silencio), así que el precio de "Mojarra frita" se pide con un modal
+    // propio de React (askPrompt), que sí funciona igual en web y en APK.
+    const isMojarra = String(menuItem.name || '').toLowerCase().includes('mojarra frita');
+
+    if (isMojarra) {
+      const defaultPrice = menuItem.price ?? 110;
+      const input = await askPrompt({
+        title: 'Precio de la mojarra frita',
+        message: 'Ingrese el costo para este platillo (Q):',
+        defaultValue: Number(defaultPrice).toFixed(2),
+      });
+      if (input === null) return; // usuario canceló
+      const value = Number(String(input).replace(',', '.'));
+      if (Number.isNaN(value) || value < 0) {
+        showError('Precio inválido. Operación cancelada.');
+        return;
+      }
+      const id = `${menuItem._id}::${Date.now()}`;
+      setCart((current) => [
+        ...current,
+        { id, menuItem: menuItem._id, name: menuItem.name, price: value, quantity: 1, observations: '' },
+      ]);
+      showSuccess('Elemento seleccionado con éxito');
+      return;
+    }
 
     setCart((current) => {
-      const isMojarra = String(menuItem.name || '').toLowerCase().includes('mojarra frita');
-      if (isMojarra) {
-        const defaultPrice = menuItem.price ?? 110;
-        const input = window.prompt('Ingrese costo para este platillo (Q):', Number(defaultPrice).toFixed(2));
-        if (input === null) return current;
-        const value = Number(String(input).replace(',', '.'));
-        if (Number.isNaN(value) || value < 0) {
-          window.alert('Precio inválido. Operación cancelada.');
-          return current;
-        }
-        const id = `${menuItem._id}::${Date.now()}`;
-        added = true;
-        return [...current, { id, menuItem: menuItem._id, name: menuItem.name, price: value, quantity: 1, observations: '' }];
-      }
-
-      added = true;
       const existing = current.find((entry) => entry.id === menuItem._id);
       if (existing) {
         return current.map((entry) => (entry.id === menuItem._id ? { ...entry, quantity: entry.quantity + 1 } : entry));
       }
       return [...current, { id: menuItem._id, menuItem: menuItem._id, name: menuItem.name, price: menuItem.price, quantity: 1, observations: '' }];
     });
-
-    // Solo avisamos si de verdad se agregó algo (el prompt de "Mojarra frita"
-    // puede cancelarse o quedar con un precio inválido, y en esos casos no
-    // se toca el carrito).
-    if (added) {
-      showSuccess('Elemento seleccionado con éxito');
-    }
+    showSuccess('Elemento seleccionado con éxito');
   };
 
   const updateCartQuantity = (id, delta) => {

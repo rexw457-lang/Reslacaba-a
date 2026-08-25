@@ -1,30 +1,38 @@
 import { useMemo } from 'react';
 import useCartStore from '../../../features/cart/store/cartStore.js';
 import { resolveCloudinaryImageUrl } from '../../utils/formatters.js';
+import { askPrompt } from '../../utils/uiPrompt.js';
+import { showError, showSuccess } from '../../utils/toast.js';
 
 export const ClientMenuCard = ({ item }) => {
   const addItem = useCartStore((s) => s.addItem);
   const open = useCartStore((s) => s.open);
 
-  const onAdd = () => {
+  const onAdd = async () => {
     const isMojarra = String(item.name || '').toLowerCase().includes('mojarra frita');
     if (isMojarra) {
       const defaultPrice = Number(item.price || 0).toFixed(2);
-      const input = window.prompt('Ingrese precio para este platillo (Q):', defaultPrice);
+      const input = await askPrompt({
+        title: 'Precio de la mojarra frita',
+        message: 'Ingrese el precio para este platillo (Q):',
+        defaultValue: defaultPrice,
+      });
       if (input === null) return; // usuario canceló
       const value = Number(String(input).replace(',', '.'));
       if (Number.isNaN(value) || value < 0) {
-        window.alert('Precio inválido. Operación cancelada.');
+        showError('Precio inválido. Operación cancelada.');
         return;
       }
       const customItem = { ...item, _id: `${item._id}::${Date.now()}`, menuItem: item._id, price: value };
       addItem(customItem);
       open();
+      showSuccess('Alimento agregado con éxito');
       return;
     }
 
     addItem(item);
     open();
+    showSuccess('Alimento agregado con éxito');
   };
 
   const price = useMemo(() => Number(item.price || 0).toFixed(2), [item.price]);
@@ -42,7 +50,7 @@ export const ClientMenuCard = ({ item }) => {
       <div className='flex items-center justify-between gap-4 p-5'>
         <p className='text-lg font-bold text-gray-900'>Q {price}</p>
         <div className='flex items-center gap-2'>
-          <button onClick={onAdd} className='rounded-full bg-main-blue px-4 py-2 text-sm font-medium text-white transition hover:opacity-90'>Agregar</button>
+          <button onClick={() => void onAdd()} className='rounded-full bg-main-blue px-4 py-2 text-sm font-medium text-white transition hover:opacity-90'>Agregar</button>
           <span className='rounded-full bg-surface-soft px-3 py-1 text-xs font-semibold text-gray-700'>Disponible</span>
         </div>
       </div>
