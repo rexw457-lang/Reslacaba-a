@@ -29,6 +29,7 @@ import {
   META_FONT_PX,
   COLUMNS_HEADER_FONT_PX,
   ROW_FONT_PX,
+  ROW_LINE_HEIGHT_PX,
   TOTALS_LABEL_FONT_PX,
   TOTALS_AMOUNT_FONT_PX,
   A_PAGAR_LABEL_FONT_PX,
@@ -36,6 +37,7 @@ import {
   OBSERVATIONS_FONT_PX,
   TOTAL_VALUE_RIGHT_PX,
   A_PAGAR_LABEL_LEFT_PX,
+  createTextMeasurer,
   buildComandaLayout,
 } from './comandaLayout.js';
 
@@ -78,7 +80,11 @@ const wrapText = (ctx, text, maxWidth) => {
  */
 export const buildTicketCanvas = async (order, scope, { isDrinkItem }) => {
   const header = await loadHeaderImage();
-  const layout = buildComandaLayout(order, scope, isDrinkItem);
+  // Mismo measurer (mismo font/tamaño) que usa buildComandaLayout para
+  // decidir dónde partir los nombres largos en 2 líneas, así el cálculo de
+  // posiciones y el dibujo real quedan siempre de acuerdo.
+  const measureTextWidth = createTextMeasurer(ROW_FONT_PX, true);
+  const layout = buildComandaLayout(order, scope, isDrinkItem, measureTextWidth);
 
   const canvas = document.createElement('canvas');
   canvas.width = TEMPLATE_PX.width;
@@ -131,10 +137,15 @@ export const buildTicketCanvas = async (order, scope, { isDrinkItem }) => {
   } else {
     layout.items.forEach((item) => {
       drawText(item.quantity, colCenter(COLS_PX.cantidad), item.top, { fontPx: ROW_FONT_PX, align: 'center' });
-      drawText(item.name, COLS_PX.producto[0], item.top, {
-        fontPx: ROW_FONT_PX,
-        align: 'left',
-        bold: true,
+      // El nombre puede venir partido en 1 o 2 líneas (ver wrapProductName
+      // en comandaLayout.js): se dibuja línea por línea para que nunca se
+      // corra por encima de las columnas de Cant./Precio/Total.
+      (item.nameLines || [item.name]).forEach((line, lineIndex) => {
+        drawText(line, COLS_PX.producto[0], item.top + lineIndex * ROW_LINE_HEIGHT_PX, {
+          fontPx: ROW_FONT_PX,
+          align: 'left',
+          bold: true,
+        });
       });
       drawText(item.unitPrice, COLS_PX.precio[1], item.top, { fontPx: ROW_FONT_PX, align: 'right', bold: false });
       drawText(item.total, COLS_PX.total[1], item.top, { fontPx: ROW_FONT_PX, align: 'right' });

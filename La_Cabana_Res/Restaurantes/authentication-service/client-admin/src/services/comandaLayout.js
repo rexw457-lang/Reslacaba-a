@@ -68,8 +68,66 @@ export const COLS_PX = {
 // cocina/bebidas, así que llevan la letra más grande y en negrita (más
 // prioridad visual que las etiquetas de encabezado o los totales). ---
 const ROWS_TOP_PX = COLUMNS_HEADER_TOP_PX + 36;
-export const ROW_HEIGHT_PX = 36;
+export const ROW_HEIGHT_PX = 36; // alto de una fila de 1 sola línea (como antes)
+export const ROW_LINE_HEIGHT_PX = 22; // separación entre líneas cuando el nombre ocupa 2 líneas
 export const ROW_FONT_PX = 18; // antes 14
+
+// Ancho disponible para el nombre del producto (un poco menos que el ancho
+// real de la columna, para que no quede pegado a "Cant.").
+const PRODUCT_TEXT_WIDTH_PX = COLS_PX.producto[1] - COLS_PX.producto[0] - 6;
+
+/**
+ * Crea una función de medición de texto (para saber si un nombre cabe en la
+ * columna "Producto" o hay que partirlo en 2 líneas). Se apoya en un
+ * <canvas> oculto solo para medir — no se dibuja nada en él — porque
+ * `ctx.measureText` es la única forma confiable de saber el ancho real de
+ * un texto con una tipografía y tamaño dados (contar caracteres no sirve:
+ * "iiii" y "MMMM" no ocupan lo mismo).
+ */
+export const createTextMeasurer = (fontPx = ROW_FONT_PX, bold = true) => {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.font = `${bold ? '700' : '400'} ${fontPx}px Arial`;
+  return (text) => ctx.measureText(String(text ?? '')).width;
+};
+
+/**
+ * Reparte el nombre de un platillo en 1 o 2 líneas si no cabe en el ancho
+ * de la columna "Producto". Antes el nombre se dibujaba siempre en una sola
+ * línea sin límite de ancho, así que un nombre largo ("Mojarra Frita con
+ * Ensalada y Tortillas Extra") se dibujaba corrido por encima de las
+ * columnas "Cant." y "Precio (Q)" en vez de recortarse o bajar de línea.
+ * Si aun en 2 líneas no cabe (caso extremo), la 2da línea se corta con "…".
+ */
+export const wrapProductName = (name, measureTextWidth, maxWidth = PRODUCT_TEXT_WIDTH_PX, maxLines = 2) => {
+  const words = String(name || '').split(' ').filter(Boolean);
+  const lines = [];
+  let current = '';
+
+  words.forEach((word) => {
+    const attempt = current ? `${current} ${word}` : word;
+    if (measureTextWidth(attempt) > maxWidth && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = attempt;
+    }
+  });
+  if (current) lines.push(current);
+  if (lines.length === 0) lines.push('');
+
+  if (lines.length > maxLines) {
+    const kept = lines.slice(0, maxLines);
+    let lastLine = kept[maxLines - 1];
+    // Recorta caracteres hasta que "línea…" quepa en el ancho disponible.
+    while (lastLine.length > 0 && measureTextWidth(`${lastLine}…`) > maxWidth) {
+      lastLine = lastLine.slice(0, -1);
+    }
+    kept[maxLines - 1] = `${lastLine}…`;
+    return kept;
+  }
+  return lines;
+};
 
 // --- Barra + totales (sin "Descuento": solo Total y A pagar) ---
 const BLACK_BAR_HEIGHT_PX = 8;
@@ -115,7 +173,7 @@ export const getVisibleItems = (order, scope, isDrinkItem) => {
  * No dibuja nada: devuelve un objeto plano que ambas rutas de impresión
  * (canvas y HTML) consumen para pintar exactamente lo mismo.
  */
-export const buildComandaLayout = (order, scope, isDrinkItem) => {
+export const buildComandaLayout = (order, scope, isDrinkItem, measureTextWidth) => {
   const createdAt = new Date(order.createdAt);
   const fecha = createdAt.toLocaleDateString('es-GT', { day: 'numeric', month: 'long', year: 'numeric' });
   const hora = createdAt.toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' });
@@ -128,21 +186,35 @@ export const buildComandaLayout = (order, scope, isDrinkItem) => {
   ].map((row, index) => ({ ...row, top: META_TOP_PX + index * META_LINE_HEIGHT_PX }));
 
   const visibleItems = getVisibleItems(order, scope, isDrinkItem);
-  const rowCount = Math.max(visibleItems.length, 1);
+  // measureTextWidth es opcional por compatibilidad hacia atrás; si no se
+  // pasa, se crea uno con la misma tipografía/tamaño con la que se dibujan
+  // los nombres de los platillos (ver drawText/.row-cell: bold, ROW_FONT_PX).
+  const measure = measureTextWidth || createTextMeasurer(ROW_FONT_PX, true);
 
-  const items = visibleItems.map((item, index) => {
+  // Cada fila avanza según cuántas líneas necesitó el nombre del platillo
+  // (1 línea = mismo alto de siempre; 2 líneas = fila más alta), en vez de
+  // un alto fijo para todas. Así, cuando un nombre largo se parte en 2
+  // líneas, el siguiente platillo se recorre hacia abajo automáticamente y
+  // nunca queda encimado con "Cant."/"Precio (Q)" ni con la fila de abajo.
+  let cursorTop = ROWS_TOP_PX;
+  const items = visibleItems.map((item) => {
     const quantity = Number(item.quantity || 0);
     const unitPrice = Number(item.price || 0);
-    return {
-      name: item.menuItem?.name || item.label || 'Platillo',
+    const nameLines = wrapProductName(item.menuItem?.name || item.label || 'Platillo', measure);
+    const rowHeight = Math.max(ROW_HEIGHT_PX, nameLines.length * ROW_LINE_HEIGHT_PX);
+    const built = {
+      name: nameLines[0],
+      nameLines,
       quantity,
       unitPrice: formatCurrency(unitPrice),
       total: formatCurrency(unitPrice * quantity),
-      top: ROWS_TOP_PX + index * ROW_HEIGHT_PX,
+      top: cursorTop,
     };
+    cursorTop += rowHeight;
+    return built;
   });
 
-  const itemsBottom = ROWS_TOP_PX + rowCount * ROW_HEIGHT_PX;
+  const itemsBottom = visibleItems.length === 0 ? ROWS_TOP_PX + ROW_HEIGHT_PX : cursorTop;
   const blackBarTop = itemsBottom + 12;
   const totalsTop = blackBarTop + BLACK_BAR_HEIGHT_PX + TOTALS_GAP_PX;
 

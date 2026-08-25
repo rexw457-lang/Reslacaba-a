@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { createOrder, getMenuItems, getOrders, getTables, updateOrderStatus, updateOrderItems, deleteOrder, getRestaurants, updateRestaurant } from '../services/adminApi.js';
-import { printToEposStation } from '../services/eposPrint.js';
+import { jsPDF } from 'jspdf';
+import { printToEposStation, buildTicketCanvas } from '../services/eposPrint.js';
 import {
   TEMPLATE_PX,
   HEADER_IMAGE_URL,
@@ -9,6 +10,7 @@ import {
   META_FONT_PX,
   COLUMNS_HEADER_FONT_PX,
   ROW_FONT_PX,
+  ROW_LINE_HEIGHT_PX,
   TOTALS_LABEL_FONT_PX,
   TOTALS_AMOUNT_FONT_PX,
   A_PAGAR_LABEL_FONT_PX,
@@ -18,6 +20,7 @@ import {
   TOTAL_VALUE_WIDTH_PX,
   A_PAGAR_LABEL_LEFT_PX,
   A_PAGAR_VALUE_WIDTH_PX,
+  createTextMeasurer,
   buildComandaLayout,
 } from '../services/comandaLayout.js';
 import { Spinner } from '../features/auth/components/Spinner.jsx';
@@ -84,21 +87,35 @@ const PRINT_SCOPE_LABELS = {
 };
 
 const generateOrderPrintHtml = (order, scope = 'full') => {
-  const layout = buildComandaLayout(order, scope, isDrinkItem);
+  // Mismo measurer (mismo font/tamaño) que usa la impresión directa a la
+  // impresora térmica, así el HTML de respaldo (window.print()) parte los
+  // nombres largos exactamente en el mismo punto.
+  const measureTextWidth = createTextMeasurer(ROW_FONT_PX, true);
+  const layout = buildComandaLayout(order, scope, isDrinkItem, measureTextWidth);
   const pageHeightMm = mm(layout.pageHeightPx);
   const colCenterMm = ([left, right]) => mm((left + right) / 2);
 
   const itemsHtml = layout.itemsEmpty
     ? `<div class="row-cell" style="top: ${mm(layout.items[0]?.top ?? layout.columnsHeaderTop + 42)}mm; left: ${mm(COLS_PX.producto[0])}mm; font-size: ${ROW_FONT_PX}px; font-weight: 400; text-align: left;">Sin artículos</div>`
     : layout.items
-        .map(
-          (item) => `
+        .map((item) => {
+          // El nombre puede venir en 1 o 2 líneas (wrapProductName en
+          // comandaLayout.js): un div por línea, en vez de un solo div con
+          // "white-space: nowrap" que antes dejaba el texto corrido por
+          // encima de "Cant."/"Precio (Q)" cuando el nombre era largo.
+          const nameLinesHtml = (item.nameLines || [item.name])
+            .map(
+              (line, lineIndex) => `
+        <div class="row-cell" style="top: ${mm(item.top + lineIndex * ROW_LINE_HEIGHT_PX)}mm; left: ${mm(COLS_PX.producto[0])}mm; width: ${mm(COLS_PX.producto[1] - COLS_PX.producto[0])}mm; font-size: ${ROW_FONT_PX}px; font-weight: 700; text-align: left; white-space: normal;">${line}</div>`
+            )
+            .join('');
+          return `
         <div class="row-cell" style="top: ${mm(item.top)}mm; left: ${colCenterMm(COLS_PX.cantidad) - mm(COLS_PX.cantidad[1] - COLS_PX.cantidad[0]) / 2}mm; width: ${mm(COLS_PX.cantidad[1] - COLS_PX.cantidad[0])}mm; font-size: ${ROW_FONT_PX}px; text-align: center;">${item.quantity}</div>
-        <div class="row-cell" style="top: ${mm(item.top)}mm; left: ${mm(COLS_PX.producto[0])}mm; width: ${mm(COLS_PX.producto[1] - COLS_PX.producto[0])}mm; font-size: ${ROW_FONT_PX}px; font-weight: 700; text-align: left;">${item.name}</div>
+        ${nameLinesHtml}
         <div class="row-cell" style="top: ${mm(item.top)}mm; right: ${mm(TEMPLATE_PX.width - COLS_PX.precio[1])}mm; width: ${mm(COLS_PX.precio[1] - COLS_PX.precio[0])}mm; font-size: ${ROW_FONT_PX}px; font-weight: 400; text-align: right;">${item.unitPrice}</div>
         <div class="row-cell" style="top: ${mm(item.top)}mm; right: ${mm(TEMPLATE_PX.width - COLS_PX.total[1])}mm; width: ${mm(COLS_PX.total[1] - COLS_PX.total[0])}mm; font-size: ${ROW_FONT_PX}px; text-align: right;">${item.total}</div>
-      `
-        )
+      `;
+        })
         .join('');
 
   const metaHtml = layout.metaRows
@@ -251,7 +268,54 @@ const autoPrintToStation = async (order, scope, restaurant) => {
   }
 };
 
-// Al confirmar un pedido en la tablet, se manda la comanda a las 2 impresoras
+// "Imprimir comanda completa" (Entregas / Historial) SIEMPRE sale por la
+// impresora de cocina cuando está configurada -- es la única impresora que
+// de verdad está junto al mostrador/caja en la mayoría de los locales, y es
+// la comanda de referencia para reclamos o revisiones, así que no tiene
+// sentido mandarla a bebidas. Si la impresora de cocina no está configurada
+// o falla, cae al respaldo de siempre (window.print()), desde donde
+// también se puede elegir "Guardar como PDF" como destino de impresión.
+const printFullOrderToKitchen = async (order, restaurant) => {
+  if (isEposReady(restaurant, 'kitchen')) {
+    try {
+      await printToEposStation(order, 'full', getStationConfig(restaurant, 'kitchen'), { isDrinkItem });
+      showSuccess('Comanda completa enviada a la impresora de cocina.');
+      return;
+    } catch (err) {
+      showError(`No se pudo imprimir en la impresora de cocina: ${err.message}`);
+      // Igual que en printToStation: si la impresora de red falla, seguimos
+      // con el respaldo para no perder la comanda.
+    }
+  }
+  printOrder(order, 'full');
+};
+
+// Genera un PDF de la comanda completa reutilizando exactamente el mismo
+// dibujo (buildTicketCanvas) que ya usan el ticket térmico y la vista de
+// impresión, para que el PDF se vea igual. Se descarga directo desde el
+// navegador (pdf.save), sin depender del diálogo de impresión del sistema
+// (que en el WebView del APK no siempre está disponible / no muestra
+// "Guardar como PDF" como sí hace un navegador de escritorio).
+const downloadOrderPdf = async (order) => {
+  try {
+    const canvas = await buildTicketCanvas(order, 'full', { isDrinkItem });
+    const widthMm = PAGE_WIDTH_MM;
+    const heightMm = mm(canvas.height);
+
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: [widthMm, heightMm],
+    });
+    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, widthMm, heightMm);
+    pdf.save(`comanda-${order.orderNumber || order._id}.pdf`);
+    showSuccess('PDF de la comanda descargado.');
+  } catch (err) {
+    showError(`No se pudo generar el PDF: ${err.message}`);
+  }
+};
+
+
 // físicas: la de cocina (solo platillos de comida) y la de recepción/bebidas
 // (solo bebidas, postres y extras incluidos que correspondan). Cada una se
 // imprime solo si tiene su propia impresora ePOS configurada (ver
@@ -1016,7 +1080,8 @@ export const Orders = () => {
                       <select value={normalizeOrderStatus(order.status)} onChange={(event) => handleStatusChange(order._id, event.target.value)} className='admin-input px-3 py-2 text-sm font-semibold'>
                         {deliveryStatusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
                       </select>
-                      <button type='button' onClick={() => printOrder(order, 'full')} className='admin-button-secondary px-3 py-2 text-sm'>Imprimir comanda completa</button>
+                      <button type='button' onClick={() => printFullOrderToKitchen(order, restaurant)} className='admin-button-secondary px-3 py-2 text-sm'>Imprimir comanda completa</button>
+                      <button type='button' onClick={() => downloadOrderPdf(order)} className='admin-button-secondary px-3 py-2 text-sm'>Guardar PDF</button>
                     </>
                   )}
                   {view === 'entregas' && canEditOrderItems && (
@@ -1154,7 +1219,10 @@ export const Orders = () => {
                           <span className='text-lg font-black text-[#e0e0e0]'>{formatCurrency(order.total)}</span>
                           <span className={`admin-status ${getStatusClass(order.status)}`}>{order.status}</span>
                         </div>
-                        <button type='button' onClick={() => printOrder(order, 'full')} className='admin-button-secondary mt-3 px-3 py-2 text-sm'>Imprimir comanda completa</button>
+                        <div className='mt-3 flex flex-wrap gap-2'>
+                          <button type='button' onClick={() => printFullOrderToKitchen(order, restaurant)} className='admin-button-secondary px-3 py-2 text-sm'>Imprimir comanda completa</button>
+                          <button type='button' onClick={() => downloadOrderPdf(order)} className='admin-button-secondary px-3 py-2 text-sm'>Guardar PDF</button>
+                        </div>
                       </div>
                       <p className='mt-4 text-sm text-[#e0e0e0]'>
                         {order.items?.filter((it) => !(it.isIncluded && it.hideInBebidas)).map((item) => `${item.quantity}× ${item.menuItem?.name || item.label || 'Platillo'}`).join(', ')}
