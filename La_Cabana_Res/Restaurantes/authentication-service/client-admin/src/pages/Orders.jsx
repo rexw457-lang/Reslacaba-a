@@ -127,7 +127,7 @@ const generateOrderPrintHtml = (order, scope = 'full') => {
           .field { position: absolute; display: flex; flex-direction: column; }
           .value { font-weight: 700; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #000; }
           .dotted-line { position: absolute; left: ${mm(layout.marginX - 16)}mm; right: ${mm(TEMPLATE_PX.width - layout.rightX - 16)}mm; top: ${mm(layout.dottedLineY)}mm; border-top: 2px dotted #000; }
-          .columns-header { position: absolute; font-weight: 700; font-size: ${COLUMNS_HEADER_FONT_PX}px; color: #000; top: ${mm(layout.columnsHeaderTop)}mm; }
+          .columns-header { position: absolute; font-weight: 700; font-size: ${COLUMNS_HEADER_FONT_PX}px; color: #000; top: ${mm(layout.columnsHeaderTop)}mm; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
           .row-cell { position: absolute; font-weight: 700; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #000; }
           .black-bar { position: absolute; left: 0; right: 0; top: ${mm(layout.blackBarTop)}mm; height: ${mm(layout.blackBarHeight)}mm; background: #000; }
           .totals-label { position: absolute; font-weight: 700; color: #000; }
@@ -142,7 +142,7 @@ const generateOrderPrintHtml = (order, scope = 'full') => {
             ${metaHtml}
             <div class="dotted-line"></div>
             <div class="columns-header" style="left: ${mm(COLS_PX.producto[0])}mm; text-align: left;">Producto</div>
-            <div class="columns-header" style="left: ${colCenterMm(COLS_PX.cantidad) - mm(COLS_PX.cantidad[1] - COLS_PX.cantidad[0]) / 2}mm; width: ${mm(COLS_PX.cantidad[1] - COLS_PX.cantidad[0])}mm; text-align: center;">Cantidad</div>
+            <div class="columns-header" style="left: ${colCenterMm(COLS_PX.cantidad) - mm(COLS_PX.cantidad[1] - COLS_PX.cantidad[0]) / 2}mm; width: ${mm(COLS_PX.cantidad[1] - COLS_PX.cantidad[0])}mm; text-align: center;">Cant.</div>
             <div class="columns-header" style="right: ${mm(TEMPLATE_PX.width - COLS_PX.precio[1])}mm; text-align: right;">Precio (Q)</div>
             <div class="columns-header" style="right: ${mm(TEMPLATE_PX.width - COLS_PX.total[1])}mm; text-align: right;">Total (Q)</div>
             <!-- Renglones de artículos -->
@@ -207,10 +207,13 @@ const getStationConfig = (restaurant, station) =>
     ? { ip: restaurant?.printerKitchenIp, port: restaurant?.printerKitchenPort || 80 }
     : { ip: restaurant?.printerDrinksIp, port: restaurant?.printerDrinksPort || 80 };
 
-// Imprime en una estación (cocina o bebidas): si hay una impresora ePOS
-// configurada para esa estación, manda el ticket directo por WiFi/Ethernet
-// sin diálogos. Si no, cae de vuelta al método anterior (window.print()),
-// para que la app siga funcionando aunque todavía no tengas las impresoras.
+// Imprime en una estación (cocina o bebidas) A PETICIÓN DEL USUARIO (botón
+// "Reimprimir cocina/bebidas" o "Imprimir comanda completa"): si hay una
+// impresora ePOS configurada para esa estación, manda el ticket directo por
+// WiFi/Ethernet sin diálogos. Si no hay impresora configurada para esa
+// estación (o la impresión ePOS falla), cae de vuelta al método anterior
+// (window.print()), para que SIEMPRE se pueda reimprimir manualmente aunque
+// esa impresora en particular todavía no esté conectada.
 const printToStation = async (order, scope, restaurant) => {
   if (isEposReady(restaurant, scope)) {
     try {
@@ -225,21 +228,44 @@ const printToStation = async (order, scope, restaurant) => {
   printOrder(order, scope);
 };
 
+// Imprime en una estación de forma AUTOMÁTICA (al confirmar un pedido nuevo,
+// o al mandar parte de un pedido). A diferencia de `printToStation`, esta
+// versión NUNCA abre el respaldo window.print() por su cuenta: cada estación
+// (cocina / bebidas) es 100% independiente de la otra, así que...
+//   - si esa estación SÍ tiene impresora ePOS configurada, imprime sola, sin
+//     que le importe si la otra estación tiene o no impresora;
+//   - si esa estación NO tiene impresora configurada todavía, simplemente no
+//     imprime nada automáticamente (no se abre ningún ticket/ventana). Esa
+//     comanda se sigue pudiendo sacar en cualquier momento a mano con el
+//     botón "Reimprimir cocina/bebidas", que sí usa el respaldo si hace falta.
+// Esto evita que, por ejemplo, quitar la IP de la impresora de bebidas haga
+// que se abra sola una ventana de impresión de bebidas en cada pedido nuevo,
+// y evita que un problema con la impresora de bebidas afecte a la de cocina.
+const autoPrintToStation = async (order, scope, restaurant) => {
+  if (!isEposReady(restaurant, scope)) return;
+  try {
+    await printToEposStation(order, scope, getStationConfig(restaurant, scope), { isDrinkItem });
+  } catch (err) {
+    showError(`No se pudo imprimir en la impresora de ${scope === 'kitchen' ? 'cocina' : 'bebidas'}: ${err.message}`);
+  }
+};
+
 // Al confirmar un pedido en la tablet, se manda la comanda a las 2 impresoras
 // físicas: la de cocina (solo platillos de comida) y la de recepción/bebidas
-// (solo bebidas, postres y extras incluidos que correspondan).
+// (solo bebidas, postres y extras incluidos que correspondan). Cada una se
+// imprime solo si tiene su propia impresora ePOS configurada (ver
+// `autoPrintToStation`); si a una estación todavía no le has conectado
+// impresora, esa comanda no sale sola, pero la puedes sacar a mano con
+// "Reimprimir cocina/bebidas" cuando quieras.
 const printOrderToStations = (order, restaurant) => {
   const hasKitchenItems = getOrderHasKitchen(order);
   const hasDrinkItems = getOrderHasDrink(order);
 
   if (hasKitchenItems) {
-    printToStation(order, 'kitchen', restaurant);
+    autoPrintToStation(order, 'kitchen', restaurant);
   }
   if (hasDrinkItems) {
-    // Pequeño retraso: evita que el bloqueador de ventanas emergentes del
-    // navegador descarte la segunda ventana (solo aplica al método de
-    // respaldo window.print(); con ePOS-Print no hace falta, pero no estorba).
-    setTimeout(() => printToStation(order, 'bebidas', restaurant), 150);
+    autoPrintToStation(order, 'bebidas', restaurant);
   }
 };
 
@@ -256,10 +282,10 @@ const printPartialOrder = (order, items, restaurant) => {
   const hasDrinkItems = items.some(isDrinkItem);
 
   if (hasKitchenItems) {
-    printToStation(partialOrder, 'kitchen', restaurant);
+    autoPrintToStation(partialOrder, 'kitchen', restaurant);
   }
   if (hasDrinkItems) {
-    setTimeout(() => printToStation(partialOrder, 'bebidas', restaurant), 150);
+    autoPrintToStation(partialOrder, 'bebidas', restaurant);
   }
 };
 
@@ -411,6 +437,8 @@ export const Orders = () => {
   );
 
   const addToCart = (menuItem) => {
+    let added = false;
+
     setCart((current) => {
       const isMojarra = String(menuItem.name || '').toLowerCase().includes('mojarra frita');
       if (isMojarra) {
@@ -423,15 +451,24 @@ export const Orders = () => {
           return current;
         }
         const id = `${menuItem._id}::${Date.now()}`;
+        added = true;
         return [...current, { id, menuItem: menuItem._id, name: menuItem.name, price: value, quantity: 1, observations: '' }];
       }
 
+      added = true;
       const existing = current.find((entry) => entry.id === menuItem._id);
       if (existing) {
         return current.map((entry) => (entry.id === menuItem._id ? { ...entry, quantity: entry.quantity + 1 } : entry));
       }
       return [...current, { id: menuItem._id, menuItem: menuItem._id, name: menuItem.name, price: menuItem.price, quantity: 1, observations: '' }];
     });
+
+    // Solo avisamos si de verdad se agregó algo (el prompt de "Mojarra frita"
+    // puede cancelarse o quedar con un precio inválido, y en esos casos no
+    // se toca el carrito).
+    if (added) {
+      showSuccess('Elemento seleccionado con éxito');
+    }
   };
 
   const updateCartQuantity = (id, delta) => {

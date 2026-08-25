@@ -51,11 +51,17 @@ const DOTTED_LINE_Y_PX = META_TOP_PX + META_ROWS * META_LINE_HEIGHT_PX + 14;
 const COLUMNS_HEADER_TOP_PX = DOTTED_LINE_Y_PX + 22;
 export const COLUMNS_HEADER_FONT_PX = 15; // antes 14
 
+// Columnas más anchas que antes: con la letra más grande (ROW_FONT_PX=18 y
+// COLUMNS_HEADER_FONT_PX=15) la columna "Cantidad" necesitaba más espacio o
+// su encabezado se encimaba con el de "Precio (Q)" (bug visto en un ticket
+// real: "CanPidad" pegado a "Precio"). Por eso "Cantidad" ahora usa la
+// etiqueta corta "Cant." en el encabezado (ver eposPrint.js/Orders.jsx) y
+// tiene más ancho.
 export const COLS_PX = {
-  producto: [MARGIN_X, 236],
-  cantidad: [236, 304],
-  precio: [304, 424],
-  total: [424, RIGHT_X],
+  producto: [MARGIN_X, 220],
+  cantidad: [220, 300],
+  precio: [300, 420],
+  total: [420, RIGHT_X],
 };
 
 // --- Filas de artículos: son el dato más importante de la comanda para
@@ -78,10 +84,14 @@ const TOTALS_BLOCK_HEIGHT_PX = 96;
 
 // Posiciones X de la fila de totales, en un solo lugar para que
 // eposPrint.js (canvas) y Orders.jsx (HTML) no se desalineen entre sí.
-export const TOTAL_VALUE_LEFT_PX = MARGIN_X + 60; // 88
-export const TOTAL_VALUE_WIDTH_PX = 140;
+// (Antes el valor de "Total:" empezaba justo debajo/encima de la propia
+// etiqueta "Total:" y terminaba pegado a "A pagar:" — bug visto en un
+// ticket real donde salían encimados. Ahora hay más separación de ambos
+// lados.)
+export const TOTAL_VALUE_LEFT_PX = MARGIN_X + 100; // 128, después de "Total:"
+export const TOTAL_VALUE_WIDTH_PX = 100;
 export const TOTAL_VALUE_RIGHT_PX = TOTAL_VALUE_LEFT_PX + TOTAL_VALUE_WIDTH_PX; // 228
-export const A_PAGAR_LABEL_LEFT_PX = 250;
+export const A_PAGAR_LABEL_LEFT_PX = 250; // 22px / ~3mm de aire tras el valor de Total
 export const A_PAGAR_VALUE_WIDTH_PX = 180;
 
 export const OBSERVATIONS_FONT_PX = 13; // antes 11

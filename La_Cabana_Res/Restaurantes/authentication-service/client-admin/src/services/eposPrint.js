@@ -118,7 +118,7 @@ export const buildTicketCanvas = async (order, scope, { isDrinkItem }) => {
 
   // Encabezado de columnas
   drawText('Producto', COLS_PX.producto[0], layout.columnsHeaderTop, { fontPx: COLUMNS_HEADER_FONT_PX, align: 'left' });
-  drawText('Cantidad', colCenter(COLS_PX.cantidad), layout.columnsHeaderTop, { fontPx: COLUMNS_HEADER_FONT_PX, align: 'center' });
+  drawText('Cant.', colCenter(COLS_PX.cantidad), layout.columnsHeaderTop, { fontPx: COLUMNS_HEADER_FONT_PX, align: 'center' });
   drawText('Precio (Q)', COLS_PX.precio[1], layout.columnsHeaderTop, { fontPx: COLUMNS_HEADER_FONT_PX, align: 'right' });
   drawText('Total (Q)', COLS_PX.total[1], layout.columnsHeaderTop, { fontPx: COLUMNS_HEADER_FONT_PX, align: 'right' });
 
