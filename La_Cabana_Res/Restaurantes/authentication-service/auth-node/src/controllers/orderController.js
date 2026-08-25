@@ -64,7 +64,9 @@ const isMainCourseItem = (menuItem) => {
 
 const ensureIncludedFreeItemsForOrder = ({ items, existingDeliveredIncludedItems = [] }) => {
     const preservedLabels = new Set(existingDeliveredIncludedItems.map((it) => it.label));
-    const hasCaldo = items.some((it) => isCaldoItem(it.menuItemDoc || it.menuItem));
+    const caldoQuantity = items.reduce((total, it) => {
+        return isCaldoItem(it.menuItemDoc || it.menuItem) ? total + Number(it.quantity || 1) : total;
+    }, 0);
     const hasCeviche = items.some((it) => isCevicheItem(it.menuItemDoc || it.menuItem));
 
     const preserved = existingDeliveredIncludedItems.map((it) => ({
@@ -79,10 +81,10 @@ const ensureIncludedFreeItemsForOrder = ({ items, existingDeliveredIncludedItems
 
     const includedItems = [...preserved];
 
-    if (hasCaldo && !preservedLabels.has(INCLUDED_FREE_TORTILLAS_LABEL)) {
+    if (caldoQuantity > 0 && !preservedLabels.has(INCLUDED_FREE_TORTILLAS_LABEL)) {
         includedItems.push({
             label: INCLUDED_FREE_TORTILLAS_LABEL,
-            quantity: 1,
+            quantity: caldoQuantity,
             price: 0,
             observations: "",
             delivered: false,
@@ -106,7 +108,7 @@ const ensureIncludedFreeItemsForOrder = ({ items, existingDeliveredIncludedItems
     const mainCourseMap = new Map();
     items.forEach((it) => {
         const menuItem = it.menuItemDoc || it.menuItem;
-        if (!isMainCourseItem(menuItem)) return;
+        if (!isMainCourseItem(menuItem) || isCaldoItem(menuItem)) return;
         const label = String(menuItem.name || it.label || '').trim();
         if (!label) return;
         const existing = mainCourseMap.get(label) || { quantity: 0, label };
