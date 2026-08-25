@@ -308,7 +308,23 @@ const downloadOrderPdf = async (order) => {
       format: [widthMm, heightMm],
     });
     pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, widthMm, heightMm);
-    pdf.save(`comanda-${order.orderNumber || order._id}.pdf`);
+    const fileName = `comanda-${order.orderNumber || order._id}.pdf`;
+
+    // Dentro del APK, el WebView de Android no sabe manejar la descarga
+    // "blob:" que genera pdf.save() (igual que no maneja window.prompt/
+    // alert/confirm sin ayuda extra): el enlace invisible se crea, pero no
+    // pasa nada. Por eso, si detectamos el puente nativo que expone
+    // MainActivity.kt (AndroidPdfSaver), le mandamos el PDF en base64 para
+    // que lo guarde él directamente en el almacenamiento del dispositivo.
+    if (window.AndroidPdfSaver?.savePdf) {
+      const base64 = pdf.output('datauristring').split(',')[1];
+      window.AndroidPdfSaver.savePdf(base64, fileName);
+      showSuccess('PDF de la comanda guardado en Descargas.');
+      return;
+    }
+
+    // En un navegador normal (web), esto sí dispara la descarga nativa.
+    pdf.save(fileName);
     showSuccess('PDF de la comanda descargado.');
   } catch (err) {
     showError(`No se pudo generar el PDF: ${err.message}`);
