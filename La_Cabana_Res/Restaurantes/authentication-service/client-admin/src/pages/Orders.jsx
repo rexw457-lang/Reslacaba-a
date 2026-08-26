@@ -269,20 +269,21 @@ const autoPrintToStation = async (order, scope, restaurant) => {
 };
 
 // "Imprimir comanda completa" (Entregas / Historial) SIEMPRE sale por la
-// impresora de cocina cuando está configurada -- es la única impresora que
-// de verdad está junto al mostrador/caja en la mayoría de los locales, y es
-// la comanda de referencia para reclamos o revisiones, así que no tiene
-// sentido mandarla a bebidas. Si la impresora de cocina no está configurada
-// o falla, cae al respaldo de siempre (window.print()), desde donde
-// también se puede elegir "Guardar como PDF" como destino de impresión.
+// impresora de bebidas cuando está configurada -- es la que está junto al
+// mostrador/caja, y es la comanda de referencia para reclamos o revisiones.
+// Esto SOLO ocurre cuando el usuario presiona el botón "Imprimir comanda
+// completa" a mano; esta función nunca se llama sola/automáticamente. Si la
+// impresora de bebidas no está configurada o falla, cae al respaldo de
+// siempre (window.print()), desde donde también se puede elegir "Guardar
+// como PDF" como destino de impresión.
 const printFullOrderToKitchen = async (order, restaurant) => {
-  if (isEposReady(restaurant, 'kitchen')) {
+  if (isEposReady(restaurant, 'bebidas')) {
     try {
-      await printToEposStation(order, 'full', getStationConfig(restaurant, 'kitchen'), { isDrinkItem });
-      showSuccess('Comanda completa enviada a la impresora de cocina.');
+      await printToEposStation(order, 'full', getStationConfig(restaurant, 'bebidas'), { isDrinkItem });
+      showSuccess('Comanda completa enviada a la impresora de bebidas.');
       return;
     } catch (err) {
-      showError(`No se pudo imprimir en la impresora de cocina: ${err.message}`);
+      showError(`No se pudo imprimir en la impresora de bebidas: ${err.message}`);
       // Igual que en printToStation: si la impresora de red falla, seguimos
       // con el respaldo para no perder la comanda.
     }
