@@ -45,14 +45,14 @@ const RIGHT_X = TEMPLATE_PX.width - MARGIN_X; // 548
 // pedido normal este valor es 0 y todo el layout de abajo (Mesero/Fecha/
 // Mesa, artículos, totales) queda EXACTAMENTE igual que antes, en las mismas
 // posiciones de siempre.
-const TOGO_BANNER_HEIGHT_PX = 44;
-export const TOGO_FONT_PX = 26;
+const TOGO_BANNER_HEIGHT_PX = 88; // antes 44 (doble, letra 2x)
+export const TOGO_FONT_PX = 52; // antes 26 (2x)
 export const TOGO_LABEL = 'PARA LLEVAR';
 
 // --- Datos del pedido (Mesero / No. Pedido / Fecha / Mesa) ---
-const META_TOP_PX = 226;
-const META_LINE_HEIGHT_PX = 34;
-export const META_FONT_PX = 20; // antes 17
+const META_TOP_PX = 246; // antes 226 (+20 de aire extra bajo el header, que no cambia de tamaño)
+const META_LINE_HEIGHT_PX = 68; // antes 34 (2x, para que las líneas no se encimen con la letra más grande)
+export const META_FONT_PX = 40; // antes 20 (2x)
 const META_ROWS = 4; // Mesero, No. Pedido, Fecha, Mesa
 
 // --- Separador punteado + encabezado de columnas ---
@@ -60,7 +60,7 @@ const META_ROWS = 4; // Mesero, No. Pedido, Fecha, Mesa
 // aviso "PARA LLEVAR" o no, así que se recalculan dentro de
 // buildComandaLayout. Se dejan aquí solo los tamaños de letra, que no
 // cambian con el aviso.)
-export const COLUMNS_HEADER_FONT_PX = 15; // antes 14
+export const COLUMNS_HEADER_FONT_PX = 30; // antes 15 (2x)
 
 // Columnas más anchas que antes: con la letra más grande (ROW_FONT_PX=18 y
 // COLUMNS_HEADER_FONT_PX=15) la columna "Cantidad" necesitaba más espacio o
@@ -68,10 +68,15 @@ export const COLUMNS_HEADER_FONT_PX = 15; // antes 14
 // real: "CanPidad" pegado a "Precio"). Por eso "Cantidad" ahora usa la
 // etiqueta corta "Cant." en el encabezado (ver eposPrint.js/Orders.jsx) y
 // tiene más ancho.
+// El ancho total (576px) es un límite físico de la impresora térmica (no se
+// puede "agrandar" el papel), así que al duplicar la letra estas columnas
+// se mantienen dentro del mismo ancho; solo se le quitan unos px a
+// "Producto" para dárselos a "Cant." y que "Cant." (ahora a 30px) no se
+// recorte contra "Precio (Q)".
 export const COLS_PX = {
-  producto: [MARGIN_X, 220],
-  cantidad: [220, 300],
-  precio: [300, 420],
+  producto: [MARGIN_X, 205],
+  cantidad: [205, 295],
+  precio: [295, 420],
   total: [420, RIGHT_X],
 };
 
@@ -81,9 +86,13 @@ export const COLS_PX = {
 // (ROWS_TOP_PX también se recalcula dentro de buildComandaLayout por la
 // misma razón que dottedLineY/columnsHeaderTop: depende del aviso "PARA
 // LLEVAR".)
-export const ROW_HEIGHT_PX = 36; // alto de una fila de 1 sola línea (como antes)
-export const ROW_LINE_HEIGHT_PX = 22; // separación entre líneas cuando el nombre ocupa 2 líneas
-export const ROW_FONT_PX = 18; // antes 14
+export const ROW_HEIGHT_PX = 72; // antes 36 (2x, alto de una fila de 1 sola línea)
+export const ROW_LINE_HEIGHT_PX = 44; // antes 22 (2x, separación entre líneas cuando el nombre ocupa 2 líneas)
+export const ROW_FONT_PX = 36; // antes 18 (2x)
+// Espacio extra ENTRE un platillo y el siguiente (además de su propia
+// altura), para que la comanda no se vea apretada: cada renglón de
+// artículo queda más separado del de abajo, sea de 1 o de 2 líneas.
+export const ROW_GAP_PX = 26;
 
 // Ancho disponible para el nombre del producto (un poco menos que el ancho
 // real de la columna, para que no quede pegado a "Cant.").
@@ -143,30 +152,28 @@ export const wrapProductName = (name, measureTextWidth, maxWidth = PRODUCT_TEXT_
 };
 
 // --- Barra + totales (sin "Descuento": solo Total y A pagar) ---
-const BLACK_BAR_HEIGHT_PX = 8;
-const TOTALS_GAP_PX = 34;
-export const TOTALS_LABEL_FONT_PX = 17; // antes 15
-export const TOTALS_AMOUNT_FONT_PX = 17; // antes 15
-export const A_PAGAR_LABEL_FONT_PX = 17; // antes 15
-export const A_PAGAR_AMOUNT_FONT_PX = 34; // antes 28
-// Alto del bloque de totales (una sola fila: "Total:" a la izquierda y
-// "A pagar:" + monto grande a la derecha).
-const TOTALS_BLOCK_HEIGHT_PX = 96;
+const BLACK_BAR_HEIGHT_PX = 16; // antes 8 (2x)
+const TOTALS_GAP_PX = 68; // antes 34 (2x)
+export const TOTALS_LABEL_FONT_PX = 34; // antes 17 (2x)
+export const TOTALS_AMOUNT_FONT_PX = 34; // antes 17 (2x)
+export const A_PAGAR_LABEL_FONT_PX = 34; // antes 17 (2x)
+export const A_PAGAR_AMOUNT_FONT_PX = 68; // antes 34 (2x)
 
-// Posiciones X de la fila de totales, en un solo lugar para que
-// eposPrint.js (canvas) y Orders.jsx (HTML) no se desalineen entre sí.
-// (Antes el valor de "Total:" empezaba justo debajo/encima de la propia
-// etiqueta "Total:" y terminaba pegado a "A pagar:" — bug visto en un
-// ticket real donde salían encimados. Ahora hay más separación de ambos
-// lados.)
-export const TOTAL_VALUE_LEFT_PX = MARGIN_X + 100; // 128, después de "Total:"
-export const TOTAL_VALUE_WIDTH_PX = 100;
-export const TOTAL_VALUE_RIGHT_PX = TOTAL_VALUE_LEFT_PX + TOTAL_VALUE_WIDTH_PX; // 228
-export const A_PAGAR_LABEL_LEFT_PX = 250; // 22px / ~3mm de aire tras el valor de Total
-export const A_PAGAR_VALUE_WIDTH_PX = 180;
+// Antes "Total:" y "A pagar:" iban lado a lado en una sola fila, repartidos
+// en columnas angostas (fijas en px). Con la letra al doble esas columnas
+// ya no alcanzaban para el monto grande de "A pagar:" (68px), así que ahora
+// cada uno usa una fila completa (ancho completo del ticket, de marginX a
+// rightX) y "A pagar:" va una fila abajo de "Total:". Esto usa más alto de
+// ticket (que es justamente lo que se pidió), no más ancho: el ancho sigue
+// limitado por la impresora (576px).
+export const TOTALS_ROW_GAP_PX = 62; // separación entre la fila de "Total:" y la de "A pagar:"
+// Alto del bloque de totales completo (fila "Total:" + fila "A pagar:" con
+// su monto grande), con aire de sobra para que "Observaciones" no quede
+// encimado con el monto de 68px.
+const TOTALS_BLOCK_HEIGHT_PX = 170;
 
-export const OBSERVATIONS_FONT_PX = 13; // antes 11
-const BOTTOM_MARGIN_PX = 40;
+export const OBSERVATIONS_FONT_PX = 26; // antes 13 (2x)
+const BOTTOM_MARGIN_PX = 80; // antes 40 (2x)
 
 export const formatCurrency = (value) =>
   new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(Number(value || 0));
@@ -201,9 +208,9 @@ export const buildComandaLayout = (order, scope, isDrinkItem, measureTextWidth) 
   const toGoBannerTop = HEADER_HEIGHT_PX + 14;
 
   const metaTop = META_TOP_PX + toGoOffset;
-  const dottedLineY = metaTop + META_ROWS * META_LINE_HEIGHT_PX + 14;
-  const columnsHeaderTop = dottedLineY + 22;
-  const rowsTop = columnsHeaderTop + 36;
+  const dottedLineY = metaTop + META_ROWS * META_LINE_HEIGHT_PX + 28; // antes +14 (2x)
+  const columnsHeaderTop = dottedLineY + 44; // antes +22 (2x)
+  const rowsTop = columnsHeaderTop + 72; // antes +36 (2x)
 
   const metaRows = [
     { label: 'Mesero:', value: order.waiter || '—' },
@@ -237,17 +244,20 @@ export const buildComandaLayout = (order, scope, isDrinkItem, measureTextWidth) 
       total: formatCurrency(unitPrice * quantity),
       top: cursorTop,
     };
-    cursorTop += rowHeight;
+    cursorTop += rowHeight + ROW_GAP_PX;
     return built;
   });
 
   const itemsBottom = visibleItems.length === 0 ? rowsTop + ROW_HEIGHT_PX : cursorTop;
-  const blackBarTop = itemsBottom + 12;
+  const blackBarTop = itemsBottom + 24; // antes +12 (2x)
   const totalsTop = blackBarTop + BLACK_BAR_HEIGHT_PX + TOTALS_GAP_PX;
+  // Fila de "A pagar:" (label + monto grande), una fila completa abajo de
+  // "Total:" — ver comentario junto a TOTALS_ROW_GAP_PX más arriba.
+  const aPagarTop = totalsTop + TOTALS_ROW_GAP_PX;
 
   const observations = order.observations || '';
   const observationsTop = totalsTop + TOTALS_BLOCK_HEIGHT_PX;
-  const pageHeightPx = (observations ? observationsTop + 30 : observationsTop) + BOTTOM_MARGIN_PX;
+  const pageHeightPx = (observations ? observationsTop + 60 : observationsTop) + BOTTOM_MARGIN_PX; // antes +30 (2x)
 
   return {
     headerHeightPx: HEADER_HEIGHT_PX,
@@ -261,6 +271,7 @@ export const buildComandaLayout = (order, scope, isDrinkItem, measureTextWidth) 
     blackBarTop,
     blackBarHeight: BLACK_BAR_HEIGHT_PX,
     totalsTop,
+    aPagarTop,
     totalLabel: 'Total:',
     totalValue: formatCurrency(order.total),
     aPagarLabel: 'A pagar:',

@@ -35,8 +35,6 @@ import {
   A_PAGAR_LABEL_FONT_PX,
   A_PAGAR_AMOUNT_FONT_PX,
   OBSERVATIONS_FONT_PX,
-  TOTAL_VALUE_RIGHT_PX,
-  A_PAGAR_LABEL_LEFT_PX,
   TOGO_FONT_PX,
   TOGO_LABEL,
   createTextMeasurer,
@@ -163,12 +161,14 @@ export const buildTicketCanvas = async (order, scope, { isDrinkItem }) => {
   ctx.fillStyle = '#000000';
   ctx.fillRect(0, layout.blackBarTop, canvas.width, layout.blackBarHeight);
 
-  // Totales (Total + A pagar, sin descuento)
+  // Totales (Total + A pagar, sin descuento). Cada uno en su propia fila de
+  // ancho completo (marginX -> rightX): con la letra al doble ya no caben
+  // lado a lado, así que "A pagar:" va una fila abajo de "Total:".
   drawText(layout.totalLabel, layout.marginX, layout.totalsTop, { fontPx: TOTALS_LABEL_FONT_PX });
-  drawText(layout.totalValue, TOTAL_VALUE_RIGHT_PX, layout.totalsTop, { fontPx: TOTALS_AMOUNT_FONT_PX, align: 'right', bold: false });
+  drawText(layout.totalValue, layout.rightX, layout.totalsTop, { fontPx: TOTALS_AMOUNT_FONT_PX, align: 'right', bold: false });
 
-  drawText(layout.aPagarLabel, A_PAGAR_LABEL_LEFT_PX, layout.totalsTop, { fontPx: A_PAGAR_LABEL_FONT_PX });
-  drawText(layout.aPagarValue, layout.rightX, layout.totalsTop + 30, {
+  drawText(layout.aPagarLabel, layout.marginX, layout.aPagarTop, { fontPx: A_PAGAR_LABEL_FONT_PX });
+  drawText(layout.aPagarValue, layout.rightX, layout.aPagarTop, {
     fontPx: A_PAGAR_AMOUNT_FONT_PX,
     align: 'right',
   });
@@ -179,7 +179,7 @@ export const buildTicketCanvas = async (order, scope, { isDrinkItem }) => {
     const maxWidth = layout.rightX - layout.marginX;
     const lines = wrapText(ctx, `Observaciones: ${layout.observations}`, maxWidth);
     lines.forEach((line, index) => {
-      drawText(line, layout.marginX, layout.observationsTop + index * (OBSERVATIONS_FONT_PX + 5), {
+      drawText(line, layout.marginX, layout.observationsTop + index * (OBSERVATIONS_FONT_PX + 10), {
         fontPx: OBSERVATIONS_FONT_PX,
         align: 'left',
       });

@@ -120,7 +120,10 @@ const seedBaseMenuItems = async () => {
             { name: "Nachos Supreme", category: "Entradas", description: "Nachos con queso y toppings.", price: 25, available: true },
             { name: "Papas fritas", category: "Entradas", description: "Papas fritas tradicionales.", price: 10, available: true },
             { name: "Papas con queso", category: "Entradas", description: "Papas con queso suave.", price: 15, available: true },
-            { name: "Porción de Camarones (Al Ajillo, A la Diabla, Empanizados o Encebollados)", category: "Extras", description: "Porción de camarones al estilo de la casa.", price: 40, available: true },
+            { name: "Porción de Camarones al Ajillo", category: "Extras", description: "Porción de camarones al ajillo.", price: 40, available: true },
+            { name: "Porción de Camarones a la Diabla", category: "Extras", description: "Porción de camarones a la diabla.", price: 40, available: true },
+            { name: "Porción de Camarones Empanizados", category: "Extras", description: "Porción de camarones empanizados.", price: 40, available: true },
+            { name: "Porción de Camarones Encebollados", category: "Extras", description: "Porción de camarones encebollados.", price: 40, available: true },
             { name: "Porción de tortillas", category: "Extras", description: "Porción de tortillas frescas.", price: 5, available: true },
             { name: "Porción de tostadas", category: "Extras", description: "Porción de tostadas.", price: 8, available: true },
             { name: "Camarones Empanizados", category: "Platos Fuertes", description: "Camarones empanizados.", price: 65, available: true },
@@ -130,13 +133,17 @@ const seedBaseMenuItems = async () => {
             { name: "Mar y Tierra", category: "Platos Fuertes", description: "Combinación de mar y tierra.", price: 130, available: true },
             { name: "Caldo de Mariscos", category: "Platos Fuertes", description: "Caldo tradicional de mariscos.", price: 95, available: true },
             { name: "Caldo de Camarones", category: "Platos Fuertes", description: "Caldo de camarones.", price: 65, available: true },
-            { name: "Pechuga Empanizada o a la Plancha", category: "Platos Fuertes", description: "Pechuga preparada al estilo del cliente.", price: 45, available: true },
+            { name: "Pechuga Empanizada", category: "Platos Fuertes", description: "Pechuga empanizada.", price: 45, available: true },
+            { name: "Pechuga a la Plancha", category: "Platos Fuertes", description: "Pechuga a la plancha.", price: 45, available: true },
             { name: "Ceviche Mixto", category: "Platos Fuertes", description: "Ceviche mixto refrescante.", price: 50, available: true },
             { name: "Ceviche de Camarón", category: "Platos Fuertes", description: "Ceviche de camarón.", price: 60, available: true },
-            { name: "Mojarra Frita (Empanizada o al Vapor)", category: "Platos Fuertes", description: "Mojarra frita según tamaño solicitado.", price: 110, available: true },
+            { name: "Mojarra Frita", category: "Platos Fuertes", description: "Mojarra frita según tamaño solicitado.", price: 110, available: true },
+            { name: "Mojarra Empanizada", category: "Platos Fuertes", description: "Mojarra empanizada según tamaño solicitado.", price: 110, available: true },
+            { name: "Mojarra al Vapor", category: "Platos Fuertes", description: "Mojarra al vapor según tamaño solicitado.", price: 110, available: true },
             { name: "Mojarra Frita con Camarones", category: "Platos Fuertes", description: "Mojarra con camarones.", price: 150, available: true },
             { name: "Costillas en Barbacoa", category: "Platos Fuertes", description: "Costillas en barbacoa.", price: 65, available: true },
-            { name: "Alitas en Barbacoa o Búfalo", category: "Platos Fuertes", description: "Alitas al estilo del chef.", price: 60, available: true },
+            { name: "Alitas en Barbacoa", category: "Platos Fuertes", description: "Alitas en barbacoa.", price: 60, available: true },
+            { name: "Alitas Búfalo", category: "Platos Fuertes", description: "Alitas estilo búfalo.", price: 60, available: true },
             { name: "Hamburguesa de Res", category: "Hamburguesas", description: "Hamburguesa de res.", price: 40, available: true },
             { name: "Hamburguesa de Pollo", category: "Hamburguesas", description: "Hamburguesa de pollo.", price: 40, available: true },
             { name: "Hamburguesa de Tocino", category: "Hamburguesas", description: "Hamburguesa de tocino.", price: 50, available: true },
@@ -454,4 +461,3 @@ process.on('SIGTERM', () => {
         process.exit(0);
     });
 });
- 
