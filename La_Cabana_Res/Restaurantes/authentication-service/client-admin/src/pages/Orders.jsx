@@ -20,6 +20,8 @@ import {
   TOTAL_VALUE_WIDTH_PX,
   A_PAGAR_LABEL_LEFT_PX,
   A_PAGAR_VALUE_WIDTH_PX,
+  TOGO_FONT_PX,
+  TOGO_LABEL,
   createTextMeasurer,
   buildComandaLayout,
 } from '../services/comandaLayout.js';
@@ -151,12 +153,14 @@ const generateOrderPrintHtml = (order, scope = 'full') => {
           .totals-label { position: absolute; font-weight: 700; color: #000; }
           .totals-value { position: absolute; font-weight: 400; color: #000; }
           .observations { position: absolute; left: ${mm(layout.marginX)}mm; right: ${mm(TEMPLATE_PX.width - layout.rightX)}mm; top: ${mm(layout.observationsTop)}mm; font-size: ${OBSERVATIONS_FONT_PX}px; font-weight: 700; color: #000; }
+          .togo-banner { position: absolute; left: 0; right: 0; top: ${mm(layout.toGoBannerTop)}mm; font-size: ${TOGO_FONT_PX}px; font-weight: 800; text-align: center; color: #000; letter-spacing: 0.04em; }
         </style>
       </head>
       <body>
         <div class="page">
           <img src="${headerImageUrl}" class="header-img" alt="La Cabaña Restaurante" />
           <div class="overlay">
+            ${layout.isToGo ? `<div class="togo-banner">${TOGO_LABEL}</div>` : ''}
             ${metaHtml}
             <div class="dotted-line"></div>
             <div class="columns-header" style="left: ${mm(COLS_PX.producto[0])}mm; text-align: left;">Producto</div>
@@ -434,6 +438,7 @@ export const Orders = () => {
   const [page, setPage] = useState(1);
   const [cart, setCart] = useState([]);
   const [orderObservations, setOrderObservations] = useState('');
+  const [isToGoOrder, setIsToGoOrder] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [restaurant, setRestaurant] = useState(null);
   const [showPrinterSettings, setShowPrinterSettings] = useState(false);
@@ -772,11 +777,13 @@ export const Orders = () => {
         table: selectedTableId,
         items: cart.map((entry) => ({ menuItem: entry.menuItem, quantity: entry.quantity, observations: entry.observations, price: entry.price })),
         observations: orderObservations,
+        isToGo: isToGoOrder,
       };
 
       const created = await createOrder(payload);
       setCart([]);
       setOrderObservations('');
+      setIsToGoOrder(false);
       setOrders((current) => [created, ...current]);
       showSuccess(`Pedido ${created.orderNumber || created._id?.slice(-6)} registrado`);
       // Pedido confirmado: se imprime automáticamente en las impresoras de cocina y bebidas.
@@ -1052,6 +1059,18 @@ export const Orders = () => {
               <span className='mb-2 block text-sm font-bold text-[#e6be7d]'>Observaciones generales</span>
               <textarea value={orderObservations} onChange={(event) => setOrderObservations(event.target.value)} rows='3' placeholder='Instrucciones generales del pedido' className='admin-input w-full px-3 py-2 text-sm' />
             </label>
+
+            <button
+              type='button'
+              onClick={() => setIsToGoOrder((current) => !current)}
+              className={`mt-4 w-full rounded-2xl border px-4 py-3 text-sm font-black transition ${
+                isToGoOrder
+                  ? 'border-[#e6be7d] bg-[#e6be7d] text-[#141426]'
+                  : 'border-[#e6be7d]/30 bg-transparent text-[#e6be7d]'
+              }`}
+            >
+              {isToGoOrder ? '✓ Para llevar' : 'Marcar como para llevar'}
+            </button>
 
             <button type='button' onClick={handleCreateOrder} className='admin-button-primary mt-5 w-full py-3 font-black'>Confirmar pedido</button>
           </aside>

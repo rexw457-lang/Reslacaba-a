@@ -159,7 +159,7 @@ const populateOrder = (query) => query.populate({ path: "table", select: "number
 
 export const createOrder = async (req, res) => {
     try {
-        const { table, items, observations } = req.body;
+        const { table, items, observations, isToGo } = req.body;
 
         if (!Array.isArray(items) || items.length === 0) {
             return res.status(400).json({ error: "Debe enviar al menos un platillo en el pedido." });
@@ -221,6 +221,7 @@ export const createOrder = async (req, res) => {
             table: table || undefined,
             items: orderItems,
             observations: observations?.trim() || "",
+            isToGo: Boolean(isToGo),
             total,
             drinkStatus: hasDrinkPending ? "Pendiente" : "Entregado",
             kitchenStatus: hasKitchenPending ? "Pendiente" : "Entregado",

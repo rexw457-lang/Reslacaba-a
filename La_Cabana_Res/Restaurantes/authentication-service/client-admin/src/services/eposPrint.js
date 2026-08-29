@@ -37,6 +37,8 @@ import {
   OBSERVATIONS_FONT_PX,
   TOTAL_VALUE_RIGHT_PX,
   A_PAGAR_LABEL_LEFT_PX,
+  TOGO_FONT_PX,
+  TOGO_LABEL,
   createTextMeasurer,
   buildComandaLayout,
 } from './comandaLayout.js';
@@ -105,6 +107,11 @@ export const buildTicketCanvas = async (order, scope, { isDrinkItem }) => {
     ctx.fillText(String(text ?? ''), x, y);
   };
   const colCenter = ([left, right]) => (left + right) / 2;
+
+  // Aviso "PARA LLEVAR": solo se dibuja si el pedido lo tiene marcado.
+  if (layout.isToGo) {
+    drawText(TOGO_LABEL, canvas.width / 2, layout.toGoBannerTop, { fontPx: TOGO_FONT_PX, align: 'center' });
+  }
 
   // Mesero / No. Pedido / Fecha / Mesa
   layout.metaRows.forEach((row) => {

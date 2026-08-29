@@ -40,6 +40,15 @@ export const HEADER_HEIGHT_PX = 210;
 const MARGIN_X = 28;
 const RIGHT_X = TEMPLATE_PX.width - MARGIN_X; // 548
 
+// --- Aviso "PARA LLEVAR" (opcional) ---
+// Solo ocupa espacio cuando el pedido es para llevar (order.isToGo). En un
+// pedido normal este valor es 0 y todo el layout de abajo (Mesero/Fecha/
+// Mesa, artículos, totales) queda EXACTAMENTE igual que antes, en las mismas
+// posiciones de siempre.
+const TOGO_BANNER_HEIGHT_PX = 44;
+export const TOGO_FONT_PX = 26;
+export const TOGO_LABEL = 'PARA LLEVAR';
+
 // --- Datos del pedido (Mesero / No. Pedido / Fecha / Mesa) ---
 const META_TOP_PX = 226;
 const META_LINE_HEIGHT_PX = 34;
@@ -47,8 +56,10 @@ export const META_FONT_PX = 20; // antes 17
 const META_ROWS = 4; // Mesero, No. Pedido, Fecha, Mesa
 
 // --- Separador punteado + encabezado de columnas ---
-const DOTTED_LINE_Y_PX = META_TOP_PX + META_ROWS * META_LINE_HEIGHT_PX + 14;
-const COLUMNS_HEADER_TOP_PX = DOTTED_LINE_Y_PX + 22;
+// (Estos ya NO son constantes fijas: dependen de si el pedido lleva el
+// aviso "PARA LLEVAR" o no, así que se recalculan dentro de
+// buildComandaLayout. Se dejan aquí solo los tamaños de letra, que no
+// cambian con el aviso.)
 export const COLUMNS_HEADER_FONT_PX = 15; // antes 14
 
 // Columnas más anchas que antes: con la letra más grande (ROW_FONT_PX=18 y
@@ -67,7 +78,9 @@ export const COLS_PX = {
 // --- Filas de artículos: son el dato más importante de la comanda para
 // cocina/bebidas, así que llevan la letra más grande y en negrita (más
 // prioridad visual que las etiquetas de encabezado o los totales). ---
-const ROWS_TOP_PX = COLUMNS_HEADER_TOP_PX + 36;
+// (ROWS_TOP_PX también se recalcula dentro de buildComandaLayout por la
+// misma razón que dottedLineY/columnsHeaderTop: depende del aviso "PARA
+// LLEVAR".)
 export const ROW_HEIGHT_PX = 36; // alto de una fila de 1 sola línea (como antes)
 export const ROW_LINE_HEIGHT_PX = 22; // separación entre líneas cuando el nombre ocupa 2 líneas
 export const ROW_FONT_PX = 18; // antes 14
@@ -178,12 +191,26 @@ export const buildComandaLayout = (order, scope, isDrinkItem, measureTextWidth) 
   const fecha = createdAt.toLocaleDateString('es-GT', { day: 'numeric', month: 'long', year: 'numeric' });
   const hora = createdAt.toLocaleTimeString('es-GT', { hour: '2-digit', minute: '2-digit' });
 
+  // Si el pedido es para llevar, se reserva espacio extra justo debajo del
+  // header para el aviso "PARA LLEVAR" y TODO lo de abajo (Mesero/Fecha/
+  // Mesa, separador, artículos, totales) se recorre hacia abajo ese mismo
+  // espacio. Si NO es para llevar, toGoOffset es 0 y las posiciones quedan
+  // idénticas a como estaban antes de este aviso.
+  const isToGo = Boolean(order?.isToGo);
+  const toGoOffset = isToGo ? TOGO_BANNER_HEIGHT_PX : 0;
+  const toGoBannerTop = HEADER_HEIGHT_PX + 14;
+
+  const metaTop = META_TOP_PX + toGoOffset;
+  const dottedLineY = metaTop + META_ROWS * META_LINE_HEIGHT_PX + 14;
+  const columnsHeaderTop = dottedLineY + 22;
+  const rowsTop = columnsHeaderTop + 36;
+
   const metaRows = [
     { label: 'Mesero:', value: order.waiter || '—' },
     { label: 'No. Pedido:', value: `${order.orderNumber || order._id || ''}` },
     { label: 'Fecha:', value: `${fecha} · ${hora}` },
     { label: 'Mesa:', value: getTableLabel(order) },
-  ].map((row, index) => ({ ...row, top: META_TOP_PX + index * META_LINE_HEIGHT_PX }));
+  ].map((row, index) => ({ ...row, top: metaTop + index * META_LINE_HEIGHT_PX }));
 
   const visibleItems = getVisibleItems(order, scope, isDrinkItem);
   // measureTextWidth es opcional por compatibilidad hacia atrás; si no se
@@ -196,7 +223,7 @@ export const buildComandaLayout = (order, scope, isDrinkItem, measureTextWidth) 
   // un alto fijo para todas. Así, cuando un nombre largo se parte en 2
   // líneas, el siguiente platillo se recorre hacia abajo automáticamente y
   // nunca queda encimado con "Cant."/"Precio (Q)" ni con la fila de abajo.
-  let cursorTop = ROWS_TOP_PX;
+  let cursorTop = rowsTop;
   const items = visibleItems.map((item) => {
     const quantity = Number(item.quantity || 0);
     const unitPrice = Number(item.price || 0);
@@ -214,7 +241,7 @@ export const buildComandaLayout = (order, scope, isDrinkItem, measureTextWidth) 
     return built;
   });
 
-  const itemsBottom = visibleItems.length === 0 ? ROWS_TOP_PX + ROW_HEIGHT_PX : cursorTop;
+  const itemsBottom = visibleItems.length === 0 ? rowsTop + ROW_HEIGHT_PX : cursorTop;
   const blackBarTop = itemsBottom + 12;
   const totalsTop = blackBarTop + BLACK_BAR_HEIGHT_PX + TOTALS_GAP_PX;
 
@@ -224,9 +251,11 @@ export const buildComandaLayout = (order, scope, isDrinkItem, measureTextWidth) 
 
   return {
     headerHeightPx: HEADER_HEIGHT_PX,
+    isToGo,
+    toGoBannerTop,
     metaRows,
-    dottedLineY: DOTTED_LINE_Y_PX,
-    columnsHeaderTop: COLUMNS_HEADER_TOP_PX,
+    dottedLineY,
+    columnsHeaderTop,
     items,
     itemsEmpty: visibleItems.length === 0,
     blackBarTop,

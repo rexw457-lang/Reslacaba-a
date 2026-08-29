@@ -56,6 +56,10 @@ const orderSchema = new mongoose.Schema(
             type: String,
             default: "",
         },
+        isToGo: {
+            type: Boolean,
+            default: false,
+        },
         total: {
             type: Number,
             default: 0,
