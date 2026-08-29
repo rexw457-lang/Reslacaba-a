@@ -254,18 +254,10 @@ export const updateStatus = async (req, res) => {
             return res.status(404).json({ error: "Pedido no encontrado." });
         }
 
-        if (normalizedStatus === "Entregado") {
-            const drinkReady = order.drinkStatus === "Entregado";
-            const kitchenReady = order.kitchenStatus === "Entregado";
-            if (!drinkReady || !kitchenReady) {
-                const missing = [];
-                if (!kitchenReady) missing.push("la parte de la cocina");
-                if (!drinkReady) missing.push("la parte de bebidas");
-                const message = `No se puede marcar como entregado hasta que ${missing.join(' y ')} ${missing.length > 1 ? 'se entreguen' : 'se entregue'}.`;
-                return res.status(400).json({ error: message });
-            }
-        }
-
+        // La parte de cocina y de bebidas ya no se controla desde aquí: el
+        // botón de la vista Entregas es el único lugar donde se puede marcar
+        // un pedido como "Entregado", sin exigir que kitchenStatus/drinkStatus
+        // estén en "Entregado" primero (se asume que siempre están listas).
         const updated = await populateOrder(
             Order.findByIdAndUpdate(req.params.id, { status: normalizedStatus }, { new: true }),
         ).exec();

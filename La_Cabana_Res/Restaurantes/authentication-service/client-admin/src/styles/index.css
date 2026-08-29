@@ -16,9 +16,26 @@
 }
 
 :root {
+  /* Tamaño de letra base de TODA la app (paneles, botones, tablas, formularios).
+     Tailwind calcula sus tamaños de texto (text-sm, text-xs, etc.) en rem,
+     que a su vez se calculan a partir de este font-size del <html>. Subirlo
+     aquí agranda proporcionalmente toda la interfaz (letra, íconos, botones,
+     inputs) sin tener que tocar clase por clase.
+     135% es el límite práctico antes de que empiecen a apretarse tarjetas,
+     botones en línea y celdas de tabla (texto cortándose o encimándose).
+     Esto NO afecta el ticket/comanda que se manda a imprimir: esa plantilla
+     (comandaLayout.js + eposPrint.js) dibuja en px fijos sobre un lienzo de
+     ancho fijo, totalmente independiente de este valor. */
+  font-size: 135%;
+
   font-family: 'Georgia', 'Cinzel', system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
-  font-weight: 400;
+  /* Negrita en toda la app por defecto. Las clases de Tailwind como
+     font-semibold/font-bold/font-extrabold/font-black siguen ganando donde
+     ya estén puestas (una clase pesa más que este selector de elemento), así
+     que el texto que ya era "más negrita" no cambia; esto solo sube el peso
+     del texto que antes quedaba en 400 (regular). */
+  font-weight: 700;
 
   --main-blue: #e6be7d;
   --navy-deep: #141426;

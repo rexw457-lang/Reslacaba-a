@@ -952,7 +952,7 @@ export const Orders = () => {
                       />
                       <div className='absolute inset-y-0 right-0 h-full w-1/2 bg-gradient-to-l from-[#0f1a34]/90 via-[#0f1a34]/20 to-transparent' />
                       <div className='relative h-full w-1/2 flex flex-col justify-center gap-2 p-6 text-left'>
-                        <span className='inline-flex rounded-full bg-[#0b1d41]/70 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-[#a39bff]'>
+                        <span className='inline-flex rounded-full bg-[#0b1d41]/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-[#a39bff]'>
                           {group.category}
                         </span>
                         <h3 className='text-2xl font-black text-[#e0e0e0]'>{group.category}</h3>
