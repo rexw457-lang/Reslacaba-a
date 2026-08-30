@@ -218,9 +218,19 @@ export const formatAmount = (value) =>
 export const getTableLabel = (order) =>
   order?.table?.name?.trim() ? order.table.name : order?.table?.number ? `Mesa ${order.table.number}` : 'Sin mesa';
 
+// "Extra" es un cargo genérico (Q5) que se agrega a la cuenta de la mesa
+// desde los "Accesos rápidos" del POS, pero que NUNCA debe salir en la
+// comanda de cocina (no es un platillo que cocina tenga que preparar). Sí
+// se sigue mostrando en la comanda completa/bebidas (para que quede
+// reflejado en el cobro total de la mesa).
+const isExtraChargeItem = (item) => {
+  const name = String(item?.menuItem?.name || item?.label || '').trim().toLowerCase();
+  return name === 'extra';
+};
+
 export const getVisibleItems = (order, scope, isDrinkItem) => {
   const baseVisibleItems = (order.items || []).filter((item) => !item.isIncluded);
-  if (scope === 'kitchen') return baseVisibleItems.filter((item) => !isDrinkItem(item) && !item.delivered);
+  if (scope === 'kitchen') return baseVisibleItems.filter((item) => !isDrinkItem(item) && !item.delivered && !isExtraChargeItem(item));
   if (scope === 'bebidas') return baseVisibleItems.filter((item) => isDrinkItem(item) && !item.delivered);
   return baseVisibleItems;
 };
@@ -308,6 +318,10 @@ export const buildComandaLayout = (order, scope, isDrinkItem, measureTextWidth) 
   // artículo sigue mostrando su "Total (Q)" individual, pero el total de la
   // cuenta completa no le corresponde a cocina.
   const showTotals = scope !== 'kitchen';
+  // Columna "Total (Q)" de CADA platillo: solo se imprime en bebidas/comanda
+  // completa. En cocina ya no se muestra ningún precio (ni por platillo ni
+  // el total de la cuenta), porque a cocina no le corresponde ver montos.
+  const showItemTotals = scope !== 'kitchen';
 
   const blackBarTop = itemsBottom + 24; // antes +12 (2x)
   const totalsTop = blackBarTop + BLACK_BAR_HEIGHT_PX + TOTALS_GAP_PX;
@@ -331,6 +345,7 @@ export const buildComandaLayout = (order, scope, isDrinkItem, measureTextWidth) 
     items,
     itemsEmpty: visibleItems.length === 0,
     showTotals,
+    showItemTotals,
     blackBarTop,
     blackBarHeight: BLACK_BAR_HEIGHT_PX,
     totalsTop,

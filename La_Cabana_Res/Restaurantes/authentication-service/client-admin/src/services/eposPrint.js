@@ -130,10 +130,14 @@ export const buildTicketCanvas = async (order, scope, { isDrinkItem }) => {
   ctx.restore();
 
   // Encabezado de columnas (sin "Precio (Q)": ya no se imprime el precio
-  // unitario en ninguna comanda, ni cocina ni bebidas).
+  // unitario en ninguna comanda, ni cocina ni bebidas). "Total (Q)" tampoco
+  // se imprime en cocina (layout.showItemTotals): a cocina no le
+  // corresponde ver montos, solo qué preparar y en qué cantidad.
   drawText('Producto', COLS_PX.producto[0], layout.columnsHeaderTop, { fontPx: COLUMNS_HEADER_FONT_PX, align: 'left' });
   drawText('Cant.', colCenter(COLS_PX.cantidad), layout.columnsHeaderTop, { fontPx: COLUMNS_HEADER_FONT_PX, align: 'center' });
-  drawText('Total (Q)', COLS_PX.total[1], layout.columnsHeaderTop, { fontPx: COLUMNS_HEADER_FONT_PX, align: 'right' });
+  if (layout.showItemTotals) {
+    drawText('Total (Q)', COLS_PX.total[1], layout.columnsHeaderTop, { fontPx: COLUMNS_HEADER_FONT_PX, align: 'right' });
+  }
 
   // Artículos
   if (layout.itemsEmpty) {
@@ -163,7 +167,9 @@ export const buildTicketCanvas = async (order, scope, { isDrinkItem }) => {
           bold: false,
         });
       });
-      drawText(item.total, COLS_PX.total[1], item.top, { fontPx: ROW_FONT_PX, align: 'right' });
+      if (layout.showItemTotals) {
+        drawText(item.total, COLS_PX.total[1], item.top, { fontPx: ROW_FONT_PX, align: 'right' });
+      }
     });
   }
 

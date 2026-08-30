@@ -123,7 +123,7 @@ const generateOrderPrintHtml = (order, scope = 'full') => {
         <div class="row-cell" style="top: ${mm(item.top)}mm; left: ${colCenterMm(COLS_PX.cantidad) - mm(COLS_PX.cantidad[1] - COLS_PX.cantidad[0]) / 2}mm; width: ${mm(COLS_PX.cantidad[1] - COLS_PX.cantidad[0])}mm; font-size: ${ROW_FONT_PX}px; text-align: center;">${item.quantity}</div>
         ${nameLinesHtml}
         ${obsLinesHtml}
-        <div class="row-cell" style="top: ${mm(item.top)}mm; right: ${mm(TEMPLATE_PX.width - COLS_PX.total[1])}mm; width: ${mm(COLS_PX.total[1] - COLS_PX.total[0])}mm; font-size: ${ROW_FONT_PX}px; text-align: right;">${item.total}</div>
+        ${layout.showItemTotals ? `<div class="row-cell" style="top: ${mm(item.top)}mm; right: ${mm(TEMPLATE_PX.width - COLS_PX.total[1])}mm; width: ${mm(COLS_PX.total[1] - COLS_PX.total[0])}mm; font-size: ${ROW_FONT_PX}px; text-align: right;">${item.total}</div>` : ''}
       `;
         })
         .join('');
@@ -173,7 +173,7 @@ const generateOrderPrintHtml = (order, scope = 'full') => {
             <div class="dotted-line"></div>
             <div class="columns-header" style="left: ${mm(COLS_PX.producto[0])}mm; text-align: left;">Producto</div>
             <div class="columns-header" style="left: ${colCenterMm(COLS_PX.cantidad) - mm(COLS_PX.cantidad[1] - COLS_PX.cantidad[0]) / 2}mm; width: ${mm(COLS_PX.cantidad[1] - COLS_PX.cantidad[0])}mm; text-align: center;">Cant.</div>
-            <div class="columns-header" style="right: ${mm(TEMPLATE_PX.width - COLS_PX.total[1])}mm; text-align: right;">Total (Q)</div>
+            ${layout.showItemTotals ? `<div class="columns-header" style="right: ${mm(TEMPLATE_PX.width - COLS_PX.total[1])}mm; text-align: right;">Total (Q)</div>` : ''}
             <!-- Renglones de artículos -->
             ${itemsHtml}
             ${layout.showTotals ? `
@@ -378,7 +378,7 @@ const printPartialOrder = (order, items, restaurant) => {
     total: items.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.price || 0), 0),
   };
 
-  const hasKitchenItems = items.some((item) => !isDrinkItem(item));
+  const hasKitchenItems = items.some((item) => !isDrinkItem(item) && !isExtraChargeItem(item));
   const hasDrinkItems = items.some(isDrinkItem);
 
   if (hasKitchenItems) {
@@ -436,8 +436,16 @@ const isDrinkItem = (item) => {
   );
 };
 
+// "Extra" es un cargo genérico de Q5 (botón de Accesos rápidos) que se suma
+// a la cuenta de la mesa pero que NUNCA debe generar comanda automática:
+// no es un platillo que cocina prepare ni una bebida que recepción sirva.
+const isExtraChargeItem = (item) => {
+  const name = String(item?.menuItem?.name || item?.label || item?.name || '').trim().toLowerCase();
+  return name === 'extra';
+};
+
 const getOrderHasDrink = (order) => order.items?.some(isDrinkItem);
-const getOrderHasKitchen = (order) => order.items?.some((item) => !isDrinkItem(item));
+const getOrderHasKitchen = (order) => order.items?.some((item) => !isDrinkItem(item) && !isExtraChargeItem(item));
 const isOrderActive = (order) => String(order.status) !== 'Entregado' && String(order.status) !== 'Cancelado';
 // El pedido puede venir con "table" ya populado (objeto) o solo con el ID
 // (string), según el endpoint. Esta función normaliza ambos casos para
@@ -625,6 +633,31 @@ export const Orders = () => {
       return;
     }
     addToCart(menuItem);
+  };
+
+  // "Extra": cargo fijo de Q5 que se suma a la cuenta de la mesa (p. ej. un
+  // ingrediente/artículo adicional que no amerita imprimirse como platillo).
+  // Requiere que exista en el catálogo un platillo llamado "Extra" (en
+  // cualquier categoría) — el precio SIEMPRE se fuerza a Q5 sin importar lo
+  // que tenga guardado ese platillo en el menú, igual que se hace con el
+  // precio manual de la mojarra. No genera comanda de cocina ni de bebidas
+  // (ver isExtraChargeItem y getVisibleItems en comandaLayout.js): solo
+  // suma al total de la cuenta y aparece en la comanda completa/PDF final.
+  const EXTRA_CHARGE_PRICE = 5;
+  const addExtraCharge = () => {
+    const menuItem = menuItems.find((item) => String(item.name || '').trim().toLowerCase() === 'extra');
+    if (!menuItem) {
+      showError('No se encontró "Extra" en el menú. Créalo en Menús (nombre exacto "Extra", en cualquier categoría) para usar este botón.');
+      return;
+    }
+    setCart((current) => {
+      const existing = current.find((entry) => entry.id === menuItem._id);
+      if (existing) {
+        return current.map((entry) => (entry.id === menuItem._id ? { ...entry, quantity: entry.quantity + 1 } : entry));
+      }
+      return [...current, { id: menuItem._id, menuItem: menuItem._id, name: 'Extra', price: EXTRA_CHARGE_PRICE, quantity: 1, observations: '' }];
+    });
+    showSuccess('Extra agregado a la cuenta (Q5.00)');
   };
 
   const updateCartNotes = (id, observations) => {
@@ -950,7 +983,20 @@ export const Orders = () => {
       const updated = await updateOrderItems(editingOrderId, payloadItems);
       setOrders((current) => current.map((o) => (o._id === updated._id ? updated : o)));
       if (editingItems.length) {
-        printPartialOrder(updated, editingItems, restaurant);
+        // BUG previo: `editingItems` guarda el platillo agregado en el
+        // editor con `menuItem` como solo el ID (string) y el nombre aparte
+        // en `name`. La comanda (comandaLayout.js) lee el nombre desde
+        // `item.menuItem?.name`, así que con solo el ID ahí no encontraba
+        // nada y siempre caía al valor por defecto "Platillo". Aquí lo
+        // arreglamos: antes de imprimir, le pegamos el objeto completo del
+        // platillo (tal como viene poblado en `menuItems`, con name/category
+        // incluidos) para que la comanda muestre el nombre real Y detecte
+        // bien si es bebida/postre (para mandarlo a la impresora correcta).
+        const printableEditingItems = editingItems.map((it) => ({
+          ...it,
+          menuItem: menuItems.find((m) => m._id === it.menuItem) || { name: it.name },
+        }));
+        printPartialOrder(updated, printableEditingItems, restaurant);
       }
       showSuccess('Pedido actualizado correctamente');
       closeEditor();
@@ -1350,6 +1396,13 @@ export const Orders = () => {
                   className='admin-button-secondary px-3 py-2 text-xs'
                 >
                   + Papas extra
+                </button>
+                <button
+                  type='button'
+                  onClick={addExtraCharge}
+                  className='admin-button-secondary px-3 py-2 text-xs'
+                >
+                  + Extra (Q5)
                 </button>
               </div>
             </div>
