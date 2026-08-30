@@ -127,10 +127,10 @@ export const buildTicketCanvas = async (order, scope, { isDrinkItem }) => {
   ctx.stroke();
   ctx.restore();
 
-  // Encabezado de columnas
+  // Encabezado de columnas (sin "Precio (Q)": ya no se imprime el precio
+  // unitario en ninguna comanda, ni cocina ni bebidas).
   drawText('Producto', COLS_PX.producto[0], layout.columnsHeaderTop, { fontPx: COLUMNS_HEADER_FONT_PX, align: 'left' });
   drawText('Cant.', colCenter(COLS_PX.cantidad), layout.columnsHeaderTop, { fontPx: COLUMNS_HEADER_FONT_PX, align: 'center' });
-  drawText('Precio (Q)', COLS_PX.precio[1], layout.columnsHeaderTop, { fontPx: COLUMNS_HEADER_FONT_PX, align: 'right' });
   drawText('Total (Q)', COLS_PX.total[1], layout.columnsHeaderTop, { fontPx: COLUMNS_HEADER_FONT_PX, align: 'right' });
 
   // Artículos
@@ -144,7 +144,7 @@ export const buildTicketCanvas = async (order, scope, { isDrinkItem }) => {
       drawText(item.quantity, colCenter(COLS_PX.cantidad), item.top, { fontPx: ROW_FONT_PX, align: 'center' });
       // El nombre puede venir partido en 1 o 2 líneas (ver wrapProductName
       // en comandaLayout.js): se dibuja línea por línea para que nunca se
-      // corra por encima de las columnas de Cant./Precio/Total.
+      // corra por encima de las columnas de Cant./Total.
       (item.nameLines || [item.name]).forEach((line, lineIndex) => {
         drawText(line, COLS_PX.producto[0], item.top + lineIndex * ROW_LINE_HEIGHT_PX, {
           fontPx: ROW_FONT_PX,
@@ -152,26 +152,29 @@ export const buildTicketCanvas = async (order, scope, { isDrinkItem }) => {
           bold: true,
         });
       });
-      drawText(item.unitPrice, COLS_PX.precio[1], item.top, { fontPx: ROW_FONT_PX, align: 'right', bold: false });
       drawText(item.total, COLS_PX.total[1], item.top, { fontPx: ROW_FONT_PX, align: 'right' });
     });
   }
 
-  // Barra separadora gruesa
-  ctx.fillStyle = '#000000';
-  ctx.fillRect(0, layout.blackBarTop, canvas.width, layout.blackBarHeight);
+  // Barra separadora + totales (Total / A pagar): SOLO en comandas de
+  // bebidas o comanda completa (ver showTotals en comandaLayout.js). La
+  // comanda de cocina termina justo después de los artículos.
+  if (layout.showTotals) {
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, layout.blackBarTop, canvas.width, layout.blackBarHeight);
 
-  // Totales (Total + A pagar, sin descuento). Cada uno en su propia fila de
-  // ancho completo (marginX -> rightX): con la letra al doble ya no caben
-  // lado a lado, así que "A pagar:" va una fila abajo de "Total:".
-  drawText(layout.totalLabel, layout.marginX, layout.totalsTop, { fontPx: TOTALS_LABEL_FONT_PX });
-  drawText(layout.totalValue, layout.rightX, layout.totalsTop, { fontPx: TOTALS_AMOUNT_FONT_PX, align: 'right', bold: false });
+    // Cada uno en su propia fila de ancho completo (marginX -> rightX): con
+    // la letra al doble ya no caben lado a lado, así que "A pagar:" va una
+    // fila abajo de "Total:".
+    drawText(layout.totalLabel, layout.marginX, layout.totalsTop, { fontPx: TOTALS_LABEL_FONT_PX });
+    drawText(layout.totalValue, layout.rightX, layout.totalsTop, { fontPx: TOTALS_AMOUNT_FONT_PX, align: 'right', bold: false });
 
-  drawText(layout.aPagarLabel, layout.marginX, layout.aPagarTop, { fontPx: A_PAGAR_LABEL_FONT_PX });
-  drawText(layout.aPagarValue, layout.rightX, layout.aPagarTop, {
-    fontPx: A_PAGAR_AMOUNT_FONT_PX,
-    align: 'right',
-  });
+    drawText(layout.aPagarLabel, layout.marginX, layout.aPagarTop, { fontPx: A_PAGAR_LABEL_FONT_PX });
+    drawText(layout.aPagarValue, layout.rightX, layout.aPagarTop, {
+      fontPx: A_PAGAR_AMOUNT_FONT_PX,
+      align: 'right',
+    });
+  }
 
   // Observaciones (con salto de línea si no caben en una sola)
   if (layout.observations) {

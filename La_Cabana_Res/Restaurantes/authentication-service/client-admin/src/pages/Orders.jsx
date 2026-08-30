@@ -110,7 +110,6 @@ const generateOrderPrintHtml = (order, scope = 'full') => {
           return `
         <div class="row-cell" style="top: ${mm(item.top)}mm; left: ${colCenterMm(COLS_PX.cantidad) - mm(COLS_PX.cantidad[1] - COLS_PX.cantidad[0]) / 2}mm; width: ${mm(COLS_PX.cantidad[1] - COLS_PX.cantidad[0])}mm; font-size: ${ROW_FONT_PX}px; text-align: center;">${item.quantity}</div>
         ${nameLinesHtml}
-        <div class="row-cell" style="top: ${mm(item.top)}mm; right: ${mm(TEMPLATE_PX.width - COLS_PX.precio[1])}mm; width: ${mm(COLS_PX.precio[1] - COLS_PX.precio[0])}mm; font-size: ${ROW_FONT_PX}px; font-weight: 400; text-align: right;">${item.unitPrice}</div>
         <div class="row-cell" style="top: ${mm(item.top)}mm; right: ${mm(TEMPLATE_PX.width - COLS_PX.total[1])}mm; width: ${mm(COLS_PX.total[1] - COLS_PX.total[0])}mm; font-size: ${ROW_FONT_PX}px; text-align: right;">${item.total}</div>
       `;
         })
@@ -161,19 +160,22 @@ const generateOrderPrintHtml = (order, scope = 'full') => {
             <div class="dotted-line"></div>
             <div class="columns-header" style="left: ${mm(COLS_PX.producto[0])}mm; text-align: left;">Producto</div>
             <div class="columns-header" style="left: ${colCenterMm(COLS_PX.cantidad) - mm(COLS_PX.cantidad[1] - COLS_PX.cantidad[0]) / 2}mm; width: ${mm(COLS_PX.cantidad[1] - COLS_PX.cantidad[0])}mm; text-align: center;">Cant.</div>
-            <div class="columns-header" style="right: ${mm(TEMPLATE_PX.width - COLS_PX.precio[1])}mm; text-align: right;">Precio (Q)</div>
             <div class="columns-header" style="right: ${mm(TEMPLATE_PX.width - COLS_PX.total[1])}mm; text-align: right;">Total (Q)</div>
             <!-- Renglones de artículos -->
             ${itemsHtml}
+            ${layout.showTotals ? `
             <div class="black-bar"></div>
             <!-- Totales: "Total:" y "A pagar:" ahora van en filas de ancho
                  completo (una abajo de la otra), porque con la letra al
                  doble ya no caben lado a lado en el ancho fijo de la
-                 impresora (576px). -->
+                 impresora (576px). Este bloque SOLO se imprime en bebidas /
+                 comanda completa (ver showTotals en comandaLayout.js); en
+                 cocina no se dibuja nada de esto. -->
             <div class="totals-label" style="top: ${mm(layout.totalsTop)}mm; left: ${mm(layout.marginX)}mm; font-size: ${TOTALS_LABEL_FONT_PX}px;">${layout.totalLabel}</div>
             <div class="totals-value" style="top: ${mm(layout.totalsTop)}mm; right: ${mm(TEMPLATE_PX.width - layout.rightX)}mm; font-size: ${TOTALS_AMOUNT_FONT_PX}px; text-align: right;">${layout.totalValue}</div>
             <div class="totals-label" style="top: ${mm(layout.aPagarTop)}mm; left: ${mm(layout.marginX)}mm; font-size: ${A_PAGAR_LABEL_FONT_PX}px;">${layout.aPagarLabel}</div>
             <div class="totals-value" style="top: ${mm(layout.aPagarTop)}mm; right: ${mm(TEMPLATE_PX.width - layout.rightX)}mm; font-size: ${A_PAGAR_AMOUNT_FONT_PX}px; font-weight: 900; text-align: right;">${layout.aPagarValue}</div>
+            ` : ''}
             ${order.observations ? `<div class="observations"><strong>Observaciones:</strong> ${order.observations}</div>` : ''}
           </div>
         </div>
@@ -570,6 +572,18 @@ export const Orders = () => {
       const nextQuantity = entry.quantity + delta;
       return nextQuantity > 0 ? [{ ...entry, quantity: nextQuantity }] : [];
     }));
+  };
+
+  // Accesos rápidos: agregan de una vez un ítem que ya existe en el menú
+  // (sin tener que entrar a su categoría y buscarlo), para pedidos que casi
+  // siempre llevan "una tortilla/papas extra" además del platillo principal.
+  const quickAddToCart = (matcher, label) => {
+    const menuItem = menuItems.find(matcher);
+    if (!menuItem) {
+      showError(`No se encontró "${label}" en el menú.`);
+      return;
+    }
+    addToCart(menuItem);
   };
 
   const updateCartNotes = (id, observations) => {
@@ -1030,6 +1044,26 @@ export const Orders = () => {
                 ))}
               </select>
             </label>
+
+            <div className='mt-4'>
+              <span className='mb-2 block text-sm font-bold text-[#e6be7d]'>Accesos rápidos</span>
+              <div className='flex flex-wrap gap-2'>
+                <button
+                  type='button'
+                  onClick={() => quickAddToCart((item) => /tortilla/i.test(item.name || ''), 'Tortillas extra')}
+                  className='admin-button-secondary px-3 py-2 text-xs'
+                >
+                  + Tortillas extra
+                </button>
+                <button
+                  type='button'
+                  onClick={() => quickAddToCart((item) => /papas\s*fritas/i.test(item.name || ''), 'Papas extra')}
+                  className='admin-button-secondary px-3 py-2 text-xs'
+                >
+                  + Papas extra
+                </button>
+              </div>
+            </div>
 
             <div className='mt-4 space-y-3'>
               {cart.length === 0 && <p className='rounded-2xl border border-dashed border-[#e6be7d]/20 p-4 text-sm text-[#e6be7d]'>No hay platillos añadidos.</p>}

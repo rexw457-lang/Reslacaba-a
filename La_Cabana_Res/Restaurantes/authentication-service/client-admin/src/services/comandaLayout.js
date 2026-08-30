@@ -63,20 +63,18 @@ const META_ROWS = 4; // Mesero, No. Pedido, Fecha, Mesa
 export const COLUMNS_HEADER_FONT_PX = 30; // antes 15 (2x)
 
 // Columnas más anchas que antes: con la letra más grande (ROW_FONT_PX=18 y
-// COLUMNS_HEADER_FONT_PX=15) la columna "Cantidad" necesitaba más espacio o
-// su encabezado se encimaba con el de "Precio (Q)" (bug visto en un ticket
-// real: "CanPidad" pegado a "Precio"). Por eso "Cantidad" ahora usa la
-// etiqueta corta "Cant." en el encabezado (ver eposPrint.js/Orders.jsx) y
-// tiene más ancho.
+// COLUMNS_HEADER_FONT_PX=15) la columna "Cantidad" necesitaba más espacio.
+// Por eso "Cantidad" usa la etiqueta corta "Cant." en el encabezado (ver
+// eposPrint.js/Orders.jsx) y tiene más ancho.
+// Ya NO se imprime "Precio (Q)" (precio unitario) en ninguna comanda —ni
+// cocina ni bebidas—, solo se pidió quitarlo del ticket. El espacio que
+// antes usaba esa columna se reparte entre "Producto" (nombres más largos
+// caben en una sola línea) y "Total (Q)".
 // El ancho total (576px) es un límite físico de la impresora térmica (no se
-// puede "agrandar" el papel), así que al duplicar la letra estas columnas
-// se mantienen dentro del mismo ancho; solo se le quitan unos px a
-// "Producto" para dárselos a "Cant." y que "Cant." (ahora a 30px) no se
-// recorte contra "Precio (Q)".
+// puede "agrandar" el papel).
 export const COLS_PX = {
-  producto: [MARGIN_X, 205],
-  cantidad: [205, 295],
-  precio: [295, 420],
+  producto: [MARGIN_X, 330],
+  cantidad: [330, 420],
   total: [420, RIGHT_X],
 };
 
@@ -175,6 +173,11 @@ const TOTALS_BLOCK_HEIGHT_PX = 170;
 export const OBSERVATIONS_FONT_PX = 26; // antes 13 (2x)
 const BOTTOM_MARGIN_PX = 80; // antes 40 (2x)
 
+// Espacio entre el último artículo y "Observaciones" cuando el bloque de
+// totales NO se imprime (comanda de cocina): más angosto que el espacio que
+// deja el bloque de totales completo, porque aquí no hay barra ni montos.
+const OBSERVATIONS_GAP_NO_TOTALS_PX = 40;
+
 export const formatCurrency = (value) =>
   new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(Number(value || 0));
 
@@ -249,6 +252,16 @@ export const buildComandaLayout = (order, scope, isDrinkItem, measureTextWidth) 
   });
 
   const itemsBottom = visibleItems.length === 0 ? rowsTop + ROW_HEIGHT_PX : cursorTop;
+
+  // El bloque de totales (barra negra + "Total:" + "A pagar:") SOLO se
+  // imprime cuando el ticket va a la impresora/estación de bebidas (scope
+  // 'bebidas') o cuando es la comanda completa (scope 'full', que es la que
+  // se usa para "reimprimir toda la cuenta" y siempre sale por bebidas). En
+  // la comanda de cocina (scope 'kitchen') NUNCA se imprime ese bloque: cada
+  // artículo sigue mostrando su "Total (Q)" individual, pero el total de la
+  // cuenta completa no le corresponde a cocina.
+  const showTotals = scope !== 'kitchen';
+
   const blackBarTop = itemsBottom + 24; // antes +12 (2x)
   const totalsTop = blackBarTop + BLACK_BAR_HEIGHT_PX + TOTALS_GAP_PX;
   // Fila de "A pagar:" (label + monto grande), una fila completa abajo de
@@ -256,7 +269,9 @@ export const buildComandaLayout = (order, scope, isDrinkItem, measureTextWidth) 
   const aPagarTop = totalsTop + TOTALS_ROW_GAP_PX;
 
   const observations = order.observations || '';
-  const observationsTop = totalsTop + TOTALS_BLOCK_HEIGHT_PX;
+  const observationsTop = showTotals
+    ? totalsTop + TOTALS_BLOCK_HEIGHT_PX
+    : itemsBottom + OBSERVATIONS_GAP_NO_TOTALS_PX;
   const pageHeightPx = (observations ? observationsTop + 60 : observationsTop) + BOTTOM_MARGIN_PX; // antes +30 (2x)
 
   return {
@@ -268,6 +283,7 @@ export const buildComandaLayout = (order, scope, isDrinkItem, measureTextWidth) 
     columnsHeaderTop,
     items,
     itemsEmpty: visibleItems.length === 0,
+    showTotals,
     blackBarTop,
     blackBarHeight: BLACK_BAR_HEIGHT_PX,
     totalsTop,
