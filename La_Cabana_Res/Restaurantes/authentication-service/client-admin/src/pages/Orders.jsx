@@ -12,6 +12,8 @@ import {
   COLUMNS_HEADER_FONT_PX,
   ROW_FONT_PX,
   ROW_LINE_HEIGHT_PX,
+  ITEM_OBS_FONT_PX,
+  ITEM_OBS_LINE_HEIGHT_PX,
   TOTALS_LABEL_FONT_PX,
   TOTALS_AMOUNT_FONT_PX,
   A_PAGAR_LABEL_FONT_PX,
@@ -108,9 +110,19 @@ const generateOrderPrintHtml = (order, scope = 'full') => {
         <div class="row-cell" style="top: ${mm(item.top + lineIndex * ROW_LINE_HEIGHT_PX)}mm; left: ${mm(COLS_PX.producto[0])}mm; width: ${mm(COLS_PX.producto[1] - COLS_PX.producto[0])}mm; font-size: ${ROW_FONT_PX}px; font-weight: 700; text-align: left; white-space: normal;">${line}</div>`
             )
             .join('');
+          // Observación del platillo ("sin cebolla", "bien cocido", etc.):
+          // un div por línea, debajo del nombre, en letra más chica y sin
+          // negrita para diferenciarla visualmente pero sin perderse.
+          const obsLinesHtml = (item.obsLines || [])
+            .map(
+              (line, lineIndex) => `
+        <div class="row-cell" style="top: ${mm(item.obsTop + lineIndex * ITEM_OBS_LINE_HEIGHT_PX)}mm; left: ${mm(COLS_PX.producto[0])}mm; width: ${mm(COLS_PX.producto[1] - COLS_PX.producto[0])}mm; font-size: ${ITEM_OBS_FONT_PX}px; font-weight: 400; text-align: left; white-space: normal;">${line}</div>`
+            )
+            .join('');
           return `
         <div class="row-cell" style="top: ${mm(item.top)}mm; left: ${colCenterMm(COLS_PX.cantidad) - mm(COLS_PX.cantidad[1] - COLS_PX.cantidad[0]) / 2}mm; width: ${mm(COLS_PX.cantidad[1] - COLS_PX.cantidad[0])}mm; font-size: ${ROW_FONT_PX}px; text-align: center;">${item.quantity}</div>
         ${nameLinesHtml}
+        ${obsLinesHtml}
         <div class="row-cell" style="top: ${mm(item.top)}mm; right: ${mm(TEMPLATE_PX.width - COLS_PX.total[1])}mm; width: ${mm(COLS_PX.total[1] - COLS_PX.total[0])}mm; font-size: ${ROW_FONT_PX}px; text-align: right;">${item.total}</div>
       `;
         })

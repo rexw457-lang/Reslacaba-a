@@ -112,15 +112,13 @@ export const createTextMeasurer = (fontPx = ROW_FONT_PX, bold = true) => {
 };
 
 /**
- * Reparte el nombre de un platillo en 1 o 2 líneas si no cabe en el ancho
- * de la columna "Producto". Antes el nombre se dibujaba siempre en una sola
- * línea sin límite de ancho, así que un nombre largo ("Mojarra Frita con
- * Ensalada y Tortillas Extra") se dibujaba corrido por encima de las
- * columnas "Cant." y "Precio (Q)" en vez de recortarse o bajar de línea.
- * Si aun en 2 líneas no cabe (caso extremo), la 2da línea se corta con "…".
+ * Reparte cualquier texto en líneas de máximo `maxWidth` px (sin límite de
+ * cantidad de líneas). Es el núcleo que usan tanto `wrapProductName` (con un
+ * tope de líneas) como `wrapObservationText` (sin tope, porque una
+ * instrucción de cocina no se debe recortar).
  */
-export const wrapProductName = (name, measureTextWidth, maxWidth = PRODUCT_TEXT_WIDTH_PX, maxLines = 2) => {
-  const words = String(name || '').split(' ').filter(Boolean);
+const wrapTextLines = (text, measureTextWidth, maxWidth) => {
+  const words = String(text || '').split(' ').filter(Boolean);
   const lines = [];
   let current = '';
 
@@ -135,6 +133,19 @@ export const wrapProductName = (name, measureTextWidth, maxWidth = PRODUCT_TEXT_
   });
   if (current) lines.push(current);
   if (lines.length === 0) lines.push('');
+  return lines;
+};
+
+/**
+ * Reparte el nombre de un platillo en 1 o 2 líneas si no cabe en el ancho
+ * de la columna "Producto". Antes el nombre se dibujaba siempre en una sola
+ * línea sin límite de ancho, así que un nombre largo ("Mojarra Frita con
+ * Ensalada y Tortillas Extra") se dibujaba corrido por encima de las
+ * columnas "Cant." y "Precio (Q)" en vez de recortarse o bajar de línea.
+ * Si aun en 2 líneas no cabe (caso extremo), la 2da línea se corta con "…".
+ */
+export const wrapProductName = (name, measureTextWidth, maxWidth = PRODUCT_TEXT_WIDTH_PX, maxLines = 2) => {
+  const lines = wrapTextLines(name, measureTextWidth, maxWidth);
 
   if (lines.length > maxLines) {
     const kept = lines.slice(0, maxLines);
@@ -148,6 +159,19 @@ export const wrapProductName = (name, measureTextWidth, maxWidth = PRODUCT_TEXT_
   }
   return lines;
 };
+
+// --- Observaciones de CADA platillo (p. ej. "sin cebolla", "bien cocido") ---
+// Van debajo del nombre del platillo, en letra más chica y sin negrita, para
+// diferenciarlas visualmente del nombre pero sin perderse: son instrucciones
+// que cocina/bebidas necesita ver sí o sí. A diferencia del nombre del
+// platillo, aquí NO se recortan con "…" ni se limitan a 2 líneas: una
+// instrucción de cocina incompleta es peor que un ticket un poco más largo.
+export const ITEM_OBS_FONT_PX = 28;
+export const ITEM_OBS_LINE_HEIGHT_PX = 34;
+
+export const wrapObservationText = (text, measureTextWidth, maxWidth = PRODUCT_TEXT_WIDTH_PX) =>
+  wrapTextLines(text, measureTextWidth, maxWidth);
+
 
 // --- Barra + totales (sin "Descuento": solo Total y A pagar) ---
 const BLACK_BAR_HEIGHT_PX = 16; // antes 8 (2x)
@@ -227,18 +251,29 @@ export const buildComandaLayout = (order, scope, isDrinkItem, measureTextWidth) 
   // pasa, se crea uno con la misma tipografía/tamaño con la que se dibujan
   // los nombres de los platillos (ver drawText/.row-cell: bold, ROW_FONT_PX).
   const measure = measureTextWidth || createTextMeasurer(ROW_FONT_PX, true);
+  // Medidor aparte para las observaciones de cada platillo: van en una
+  // tipografía distinta (más chica, sin negrita) a la del nombre, así que
+  // necesitan su propio measureText para que el "corte de línea" sea exacto.
+  const obsMeasure = createTextMeasurer(ITEM_OBS_FONT_PX, false);
 
   // Cada fila avanza según cuántas líneas necesitó el nombre del platillo
-  // (1 línea = mismo alto de siempre; 2 líneas = fila más alta), en vez de
-  // un alto fijo para todas. Así, cuando un nombre largo se parte en 2
-  // líneas, el siguiente platillo se recorre hacia abajo automáticamente y
-  // nunca queda encimado con "Cant."/"Precio (Q)" ni con la fila de abajo.
+  // (1 línea = mismo alto de siempre; 2 líneas = fila más alta) MÁS las
+  // líneas que ocupe su observación (si tiene), en vez de un alto fijo para
+  // todas. Así, cuando un nombre largo se parte en 2 líneas o el platillo
+  // lleva una observación ("sin cebolla", "bien cocido", etc.), el siguiente
+  // platillo se recorre hacia abajo automáticamente y nunca queda encimado.
   let cursorTop = rowsTop;
   const items = visibleItems.map((item) => {
     const quantity = Number(item.quantity || 0);
     const unitPrice = Number(item.price || 0);
     const nameLines = wrapProductName(item.menuItem?.name || item.label || 'Platillo', measure);
-    const rowHeight = Math.max(ROW_HEIGHT_PX, nameLines.length * ROW_LINE_HEIGHT_PX);
+    const nameBlockHeight = Math.max(ROW_HEIGHT_PX, nameLines.length * ROW_LINE_HEIGHT_PX);
+
+    const observationText = String(item.observations || '').trim();
+    const obsLines = observationText ? wrapObservationText(`Obs: ${observationText}`, obsMeasure) : [];
+    const obsBlockHeight = obsLines.length ? obsLines.length * ITEM_OBS_LINE_HEIGHT_PX + 6 : 0;
+
+    const rowHeight = nameBlockHeight + obsBlockHeight;
     const built = {
       name: nameLines[0],
       nameLines,
@@ -246,6 +281,8 @@ export const buildComandaLayout = (order, scope, isDrinkItem, measureTextWidth) 
       unitPrice: formatCurrency(unitPrice),
       total: formatCurrency(unitPrice * quantity),
       top: cursorTop,
+      obsLines,
+      obsTop: cursorTop + nameBlockHeight + 6,
     };
     cursorTop += rowHeight + ROW_GAP_PX;
     return built;

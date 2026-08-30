@@ -30,6 +30,8 @@ import {
   COLUMNS_HEADER_FONT_PX,
   ROW_FONT_PX,
   ROW_LINE_HEIGHT_PX,
+  ITEM_OBS_FONT_PX,
+  ITEM_OBS_LINE_HEIGHT_PX,
   TOTALS_LABEL_FONT_PX,
   TOTALS_AMOUNT_FONT_PX,
   A_PAGAR_LABEL_FONT_PX,
@@ -150,6 +152,15 @@ export const buildTicketCanvas = async (order, scope, { isDrinkItem }) => {
           fontPx: ROW_FONT_PX,
           align: 'left',
           bold: true,
+        });
+      });
+      // Observación del platillo ("sin cebolla", "bien cocido", etc.), si
+      // la tiene: va debajo del nombre, en letra más chica y sin negrita.
+      (item.obsLines || []).forEach((line, lineIndex) => {
+        drawText(line, COLS_PX.producto[0], item.obsTop + lineIndex * ITEM_OBS_LINE_HEIGHT_PX, {
+          fontPx: ITEM_OBS_FONT_PX,
+          align: 'left',
+          bold: false,
         });
       });
       drawText(item.total, COLS_PX.total[1], item.top, { fontPx: ROW_FONT_PX, align: 'right' });
