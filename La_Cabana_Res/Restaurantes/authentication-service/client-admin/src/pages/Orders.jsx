@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { createOrder, getMenuItems, getOrders, getTables, updateOrderStatus, updateOrderItems, deleteOrder, getRestaurants, updateRestaurant } from '../services/adminApi.js';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
@@ -451,6 +451,7 @@ const getTableLabel = (table) => (table?.name?.trim() ? table.name : `Mesa ${tab
 
 export const Orders = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [menuItems, setMenuItems] = useState([]);
   const [orders, setOrders] = useState([]);
   const [tables, setTables] = useState([]);
@@ -701,6 +702,20 @@ export const Orders = () => {
     if (!selectedDeliveryTableId) return [];
     return filteredOrders.filter((order) => String(getOrderTableId(order)) === String(selectedDeliveryTableId));
   }, [filteredOrders, selectedDeliveryTableId]);
+
+  // Al hacer clic en una mesa del tablero de Entregas:
+  //  - si está ocupada, mostramos sus pedidos pendientes (como hasta ahora).
+  //  - si está disponible, no tiene sentido "ver sus entregas" (no hay
+  //    pedido todavía), así que la seleccionamos automáticamente y saltamos
+  //    directo a "Crear pedido" para empezar a agregar platillos en esa mesa.
+  const handleDeliveryTableClick = (table) => {
+    if (isTableOccupied(table._id)) {
+      setSelectedDeliveryTableId(table._id);
+      return;
+    }
+    setSelectedTableId(table._id);
+    navigate('/dashboard/nuevo-pedido');
+  };
 
   const historyGroups = useMemo(() => {
     const groups = new Map();
@@ -1131,7 +1146,7 @@ export const Orders = () => {
                   : view === 'entregas'
                     ? (selectedDeliveryTableId
                         ? 'Pedidos pendientes de entrega para esta mesa.'
-                        : 'Elige una mesa para ver sus pedidos pendientes de entrega.')
+                        : 'Toca una mesa disponible para crear un pedido, o una ocupada para ver sus pedidos pendientes.')
                     : 'Consulta el historial completo del restaurante con filtros por estado.'}
           </p>
         </div>
@@ -1463,30 +1478,33 @@ export const Orders = () => {
         <section>
           <div className='mb-5 flex flex-wrap items-center gap-4'>
             <span className='flex items-center gap-2 text-sm font-semibold text-[#e0e0e0]'>
-              <span className='inline-block h-3.5 w-3.5 rounded-full bg-[#22c55e]'></span> Mesa disponible
+              <span className='inline-block h-3.5 w-3.5 rounded-full bg-[#22c55e]'></span> Mesa disponible · toca para crear un pedido
             </span>
             <span className='flex items-center gap-2 text-sm font-semibold text-[#e0e0e0]'>
-              <span className='inline-block h-3.5 w-3.5 rounded-full bg-[#ef4444]'></span> Mesa ocupada
+              <span className='inline-block h-3.5 w-3.5 rounded-full bg-[#ef4444]'></span> Mesa ocupada · toca para ver sus pedidos
             </span>
           </div>
-          <div className='grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5'>
+          <div
+            className='grid gap-4'
+            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}
+          >
             {sortedTables.map((table) => {
               const occupied = isTableOccupied(table._id);
               return (
                 <button
                   key={table._id}
                   type='button'
-                  onClick={() => setSelectedDeliveryTableId(table._id)}
-                  className={`rounded-3xl border-2 p-6 text-center shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg ${
+                  onClick={() => handleDeliveryTableClick(table)}
+                  className={`flex items-center justify-between gap-3 rounded-3xl border-2 px-6 py-6 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg ${
                     occupied
                       ? 'border-[#ef4444]/60 bg-[#ef4444]/15 text-[#fecaca]'
                       : 'border-[#22c55e]/60 bg-[#22c55e]/15 text-[#bbf7d0]'
                   }`}
                 >
-                  <div className='text-lg font-black'>{getTableLabel(table)}</div>
-                  <div className='mt-1 text-xs font-bold uppercase tracking-[0.2em]'>
+                  <span className='text-lg font-black whitespace-nowrap'>{getTableLabel(table)}</span>
+                  <span className='shrink-0 whitespace-nowrap rounded-full bg-black/20 px-3 py-1.5 text-xs font-bold uppercase tracking-wide'>
                     {occupied ? 'Ocupada' : 'Disponible'}
-                  </div>
+                  </span>
                 </button>
               );
             })}
