@@ -181,10 +181,6 @@ const OBSERVATIONS_GAP_NO_TOTALS_PX = 40;
 export const formatCurrency = (value) =>
   new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(Number(value || 0));
 
-// Formatea un número como divisa (con decimales) pero SIN el símbolo de moneda
-export const formatNumber = (value) =>
-  new Intl.NumberFormat('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0));
-
 export const getTableLabel = (order) =>
   order?.table?.name?.trim() ? order.table.name : order?.table?.number ? `Mesa ${order.table.number}` : 'Sin mesa';
 
@@ -247,8 +243,8 @@ export const buildComandaLayout = (order, scope, isDrinkItem, measureTextWidth) 
       name: nameLines[0],
       nameLines,
       quantity,
-      unitPrice: formatNumber(unitPrice),
-      total: formatNumber(unitPrice * quantity),
+      unitPrice: formatCurrency(unitPrice),
+      total: formatCurrency(unitPrice * quantity),
       top: cursorTop,
     };
     cursorTop += rowHeight + ROW_GAP_PX;

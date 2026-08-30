@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { createOrder, getMenuItems, getOrders, getTables, updateOrderStatus, updateOrderItems, deleteOrder, getRestaurants, updateRestaurant } from '../services/adminApi.js';
 import { jsPDF } from 'jspdf';
+import * as XLSX from 'xlsx';
 import { printToEposStation, buildTicketCanvas } from '../services/eposPrint.js';
 import {
   TEMPLATE_PX,
@@ -641,6 +642,101 @@ export const Orders = () => {
     return [...groups.values()].sort((a, b) => new Date(b.orders[0].createdAt) - new Date(a.orders[0].createdAt));
   }, [filteredOrders]);
 
+  // Reporte descargable (Excel) del historial COMPLETO acumulado hasta hoy:
+  // se arma siempre a partir de TODOS los pedidos guardados en el sistema
+  // (no de `filteredOrders`, que respeta los filtros de búsqueda/estado de
+  // la pantalla), así que sin importar cuándo se presione el botón, siempre
+  // sale con todos los días registrados hasta el momento — no hace falta
+  // fusionar archivos a mano ni llevar un Excel aparte.
+  const getOrderItemName = (item) => item.menuItem?.name || item.label || 'Platillo';
+  const getOrderTableLabel = (order) =>
+    order?.table?.name?.trim() ? `Mesa ${order.table.name}` : order?.table?.number ? `Mesa ${order.table.number}` : 'Sin mesa';
+
+  const buildDailyReportWorkbook = (allOrders) => {
+    // Hoja "Resumen diario": una fila por día con cantidad de pedidos y
+    // total vendido, más una fila de total general al final.
+    const dayGroups = new Map();
+    allOrders.forEach((order) => {
+      const key = getDayKey(order.createdAt);
+      const group = dayGroups.get(key) ?? { day: formatDayLabel(order.createdAt), date: new Date(order.createdAt), orders: 0, total: 0 };
+      group.orders += 1;
+      group.total += Number(order.total || 0);
+      dayGroups.set(key, group);
+    });
+    const days = [...dayGroups.values()].sort((a, b) => b.date - a.date);
+
+    const resumenRows = days.map((group) => ({
+      Fecha: group.day,
+      Pedidos: group.orders,
+      'Total vendido (Q)': Number(group.total.toFixed(2)),
+    }));
+    resumenRows.push({
+      Fecha: 'TOTAL GENERAL',
+      Pedidos: days.reduce((sum, group) => sum + group.orders, 0),
+      'Total vendido (Q)': Number(days.reduce((sum, group) => sum + group.total, 0).toFixed(2)),
+    });
+
+    // Hoja "Platillos vendidos": agregado de TODOS los días (no solo hoy),
+    // cuántas unidades se vendieron de cada platillo y cuánto generaron.
+    // Se excluyen los ítems incluidos/gratis (p. ej. tortillas de cortesía)
+    // para no inflar el conteo con cosas que no se cobraron.
+    const platilloMap = new Map();
+    allOrders.forEach((order) => {
+      (order.items || []).forEach((item) => {
+        if (item.isIncluded) return;
+        const name = getOrderItemName(item);
+        const quantity = Number(item.quantity || 0);
+        const lineTotal = Number(item.price || 0) * quantity;
+        const entry = platilloMap.get(name) ?? { name, quantity: 0, total: 0 };
+        entry.quantity += quantity;
+        entry.total += lineTotal;
+        platilloMap.set(name, entry);
+      });
+    });
+    const platillosRows = [...platilloMap.values()]
+      .sort((a, b) => b.quantity - a.quantity)
+      .map((entry) => ({
+        Platillo: entry.name,
+        'Cantidad vendida': entry.quantity,
+        'Total generado (Q)': Number(entry.total.toFixed(2)),
+      }));
+
+    // Hoja "Detalle de pedidos": una fila por pedido (fecha, mesa, mesero,
+    // estado, total y los platillos que llevó), para poder revisar o
+    // auditar cualquier pedido puntual dentro del acumulado.
+    const detalleRows = [...allOrders]
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .map((order) => ({
+        Fecha: formatDate(order.createdAt),
+        'N° Pedido': order.orderNumber || order._id,
+        Mesa: getOrderTableLabel(order),
+        Mesero: order.waiter || '—',
+        Estado: order.status,
+        'Total (Q)': Number(order.total || 0).toFixed(2),
+        Platillos: (order.items || [])
+          .filter((item) => !item.isIncluded)
+          .map((item) => `${item.quantity}x ${getOrderItemName(item)}`)
+          .join(', '),
+        Observaciones: order.observations || '',
+      }));
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(resumenRows), 'Resumen diario');
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(platillosRows), 'Platillos vendidos');
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(detalleRows), 'Detalle de pedidos');
+    return workbook;
+  };
+
+  const downloadDailyReport = () => {
+    if (!orders.length) {
+      showError('Todavía no hay pedidos registrados para generar un reporte.');
+      return;
+    }
+    const workbook = buildDailyReportWorkbook(orders);
+    const todayLabel = new Date().toLocaleDateString('es-GT').replace(/\//g, '-');
+    XLSX.writeFile(workbook, `Reporte_La_Cabana_${todayLabel}.xlsx`);
+  };
+
   const totalPages = Math.max(1, Math.ceil(filteredOrders.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const paginatedOrders = useMemo(() => {
@@ -1244,6 +1340,11 @@ export const Orders = () => {
       {view === 'history' && (
         <section className='admin-panel overflow-hidden'>
           <div className='border-b border-[#e6be7d]/10 p-5'>
+            <div className='mb-3 flex justify-end'>
+              <button type='button' onClick={downloadDailyReport} className='admin-button-primary px-4 py-2 text-sm'>
+                Descargar reporte (Excel)
+              </button>
+            </div>
             <div className='grid gap-3 md:grid-cols-[1fr_220px]'>
               <label className='relative block'>
                 <MagnifyingGlassIcon className='pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#e6be7d]' />
