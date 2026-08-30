@@ -205,6 +205,16 @@ const OBSERVATIONS_GAP_NO_TOTALS_PX = 40;
 export const formatCurrency = (value) =>
   new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' }).format(Number(value || 0));
 
+// Igual que formatCurrency pero SIN el símbolo/código de moneda (algunos
+// navegadores muestran "GTQ" en vez de "Q" según su versión de ICU). Se usa
+// solo en el total de CADA producto dentro de la comanda: como la columna ya
+// se llama "Total (Q)", repetir "GTQ"/"Q" en cada renglón es redundante y
+// ensucia el ticket. El total general ("Total:"/"A pagar:") sí sigue
+// llevando el símbolo de moneda completo (formatCurrency), porque ahí no
+// hay un encabezado de columna que ya lo indique.
+export const formatAmount = (value) =>
+  new Intl.NumberFormat('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0));
+
 export const getTableLabel = (order) =>
   order?.table?.name?.trim() ? order.table.name : order?.table?.number ? `Mesa ${order.table.number}` : 'Sin mesa';
 
@@ -279,7 +289,7 @@ export const buildComandaLayout = (order, scope, isDrinkItem, measureTextWidth) 
       nameLines,
       quantity,
       unitPrice: formatCurrency(unitPrice),
-      total: formatCurrency(unitPrice * quantity),
+      total: formatAmount(unitPrice * quantity),
       top: cursorTop,
       obsLines,
       obsTop: cursorTop + nameBlockHeight + 6,
