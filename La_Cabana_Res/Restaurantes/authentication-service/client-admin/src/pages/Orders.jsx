@@ -938,6 +938,33 @@ export const Orders = () => {
     });
   };
 
+  // Mismos "Accesos rápidos" que en Agregar pedido, pero aplicados al
+  // pedido que se está editando (editingItems) en vez del carrito nuevo.
+  const addQuickItemToEditing = (matcher, label) => {
+    const menuItem = menuItems.find(matcher);
+    if (!menuItem) {
+      showError(`No se encontró "${label}" en el menú.`);
+      return;
+    }
+    addMenuItemToEditing(menuItem._id);
+  };
+
+  const addExtraChargeToEditing = () => {
+    const menuItem = menuItems.find((item) => String(item.name || '').trim().toLowerCase() === 'extra');
+    if (!menuItem) {
+      showError('No se encontró "Extra" en el menú. Créalo en Menús (nombre exacto "Extra", en cualquier categoría) para usar este botón.');
+      return;
+    }
+    setEditingItems((current) => {
+      const existingIndex = current.findIndex((it) => String(it.menuItem) === String(menuItem._id));
+      if (existingIndex >= 0) {
+        return current.map((it, i) => (i === existingIndex ? { ...it, quantity: it.quantity + 1 } : it));
+      }
+      return [...current, { menuItem: menuItem._id, name: 'Extra', price: EXTRA_CHARGE_PRICE, quantity: 1, observations: '' }];
+    });
+    showSuccess('Extra agregado a la cuenta (Q5.00)');
+  };
+
   const submitEditedOrder = async () => {
     if (!editingOrderId) return;
     if (!editingItems.length) {
@@ -1152,6 +1179,33 @@ export const Orders = () => {
                 <option value='' disabled hidden>Elige un platillo</option>
                 {menuItems.map((m) => <option key={m._id} value={m._id}>{m.name} — {formatCurrency(m.price)}</option>)}
               </select>
+            </div>
+
+            <div className='mt-4'>
+              <span className='mb-2 block text-sm font-bold text-[#e6be7d]'>Accesos rápidos</span>
+              <div className='flex flex-wrap gap-2'>
+                <button
+                  type='button'
+                  onClick={() => addQuickItemToEditing((item) => /tortilla/i.test(item.name || ''), 'Tortillas extra')}
+                  className='admin-button-secondary px-3 py-2 text-xs'
+                >
+                  + Tortillas extra
+                </button>
+                <button
+                  type='button'
+                  onClick={() => addQuickItemToEditing((item) => /papas\s*fritas/i.test(item.name || ''), 'Papas extra')}
+                  className='admin-button-secondary px-3 py-2 text-xs'
+                >
+                  + Papas extra
+                </button>
+                <button
+                  type='button'
+                  onClick={addExtraChargeToEditing}
+                  className='admin-button-secondary px-3 py-2 text-xs'
+                >
+                  + Extra (Q5)
+                </button>
+              </div>
             </div>
 
             <div className='mt-4 flex items-center gap-2'>
