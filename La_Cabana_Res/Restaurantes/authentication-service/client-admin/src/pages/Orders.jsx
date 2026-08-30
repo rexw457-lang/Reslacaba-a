@@ -439,6 +439,15 @@ const isDrinkItem = (item) => {
 const getOrderHasDrink = (order) => order.items?.some(isDrinkItem);
 const getOrderHasKitchen = (order) => order.items?.some((item) => !isDrinkItem(item));
 const isOrderActive = (order) => String(order.status) !== 'Entregado' && String(order.status) !== 'Cancelado';
+// El pedido puede venir con "table" ya populado (objeto) o solo con el ID
+// (string), según el endpoint. Esta función normaliza ambos casos para
+// poder comparar mesas de forma consistente.
+const getOrderTableId = (order) => {
+  const table = order?.table;
+  if (!table) return null;
+  return typeof table === 'object' ? table._id : table;
+};
+const getTableLabel = (table) => (table?.name?.trim() ? table.name : `Mesa ${table?.number ?? ''}`.trim());
 
 export const Orders = () => {
   const location = useLocation();
@@ -464,6 +473,9 @@ export const Orders = () => {
     printerDrinksPort: 80,
   });
   const [savingPrinterSettings, setSavingPrinterSettings] = useState(false);
+  // Mesa elegida dentro de la pantalla de Entregas (null = mostrar el tablero
+  // de mesas; con valor = mostrar los pedidos de esa mesa).
+  const [selectedDeliveryTableId, setSelectedDeliveryTableId] = useState(null);
 
   const view = useMemo(() => {
     if (location.pathname.includes('bebidas')) return 'bebidas';
@@ -472,6 +484,12 @@ export const Orders = () => {
     if (location.pathname.includes('historial')) return 'history';
     return 'pos';
   }, [location.pathname]);
+
+  // Al cambiar de pantalla, siempre volvemos a mostrar el tablero de mesas
+  // en Entregas (que no se quede "pegado" en una mesa de una visita anterior).
+  useEffect(() => {
+    setSelectedDeliveryTableId(null);
+  }, [view]);
 
   const userRole = useAuthStore((state) => state.user?.role);
   const canEditOrderItems = useMemo(
@@ -493,7 +511,16 @@ export const Orders = () => {
         setOrders(Array.isArray(ordersData) ? ordersData : []);
         setTables(Array.isArray(tablesData) ? tablesData : []);
         if (!selectedTableId && Array.isArray(tablesData) && tablesData.length > 0) {
-          setSelectedTableId(tablesData[0]._id);
+          // Preferimos preseleccionar una mesa que esté disponible; si todas
+          // están ocupadas, dejamos la primera (el usuario deberá elegir
+          // otra manualmente, ya que las ocupadas aparecen deshabilitadas).
+          const occupiedIds = new Set(
+            (Array.isArray(ordersData) ? ordersData : [])
+              .filter(isOrderActive)
+              .map((order) => String(getOrderTableId(order)))
+          );
+          const firstAvailableTable = tablesData.find((table) => !occupiedIds.has(String(table._id)));
+          setSelectedTableId((firstAvailableTable || tablesData[0])._id);
         }
         // Este panel administra un solo restaurante (La Cabaña), por eso
         // tomamos el primero. Aquí viven las IPs de las impresoras.
@@ -639,6 +666,41 @@ export const Orders = () => {
       return false;
     });
   }, [orders, search, statusFilter, view]);
+
+  // Mesas que tienen ahora mismo un pedido activo (Pendiente/Preparando):
+  // mientras ese pedido siga activo, esa mesa no puede recibir otro pedido
+  // nuevo. Se recalcula cada vez que cambian los pedidos.
+  const occupiedTableIds = useMemo(() => {
+    const set = new Set();
+    orders.forEach((order) => {
+      if (!isOrderActive(order)) return;
+      const tableId = getOrderTableId(order);
+      if (tableId) set.add(String(tableId));
+    });
+    return set;
+  }, [orders]);
+
+  const isTableOccupied = (tableId) => occupiedTableIds.has(String(tableId));
+
+  // Mesas ordenadas por número, para pintar el tablero de Entregas siempre
+  // en el mismo orden.
+  const sortedTables = useMemo(
+    () => [...tables].sort((a, b) => Number(a.number || 0) - Number(b.number || 0)),
+    [tables],
+  );
+
+  const selectedDeliveryTable = useMemo(
+    () => tables.find((table) => table._id === selectedDeliveryTableId) || null,
+    [tables, selectedDeliveryTableId],
+  );
+
+  // Pedidos activos de la mesa seleccionada en Entregas (reutiliza
+  // filteredOrders, que en la vista "entregas" ya trae solo pedidos
+  // activos y que cumplen con la búsqueda).
+  const deliveryOrdersForSelectedTable = useMemo(() => {
+    if (!selectedDeliveryTableId) return [];
+    return filteredOrders.filter((order) => String(getOrderTableId(order)) === String(selectedDeliveryTableId));
+  }, [filteredOrders, selectedDeliveryTableId]);
 
   const historyGroups = useMemo(() => {
     const groups = new Map();
@@ -896,6 +958,11 @@ export const Orders = () => {
       return;
     }
 
+    if (isTableOccupied(selectedTableId)) {
+      showError('Esa mesa ya tiene un pedido activo. Debe entregarse o cancelarse antes de agregar uno nuevo.');
+      return;
+    }
+
     try {
       const payload = {
         table: selectedTableId,
@@ -942,6 +1009,100 @@ export const Orders = () => {
     }
   };
 
+  // Tarjeta de un pedido dentro de "Entregas" (una vez elegida la mesa).
+  // Vive fuera del JSX principal para no repetir este bloque grande, pero
+  // sigue usando el closure del componente (estado de edición, handlers,
+  // etc.), por eso se define aquí adentro en vez de como componente aparte.
+  const renderDeliveryOrderCard = (order) => (
+    <article key={order._id} className='admin-panel p-5'>
+      <div className='flex items-start justify-between gap-3'>
+        <div className='flex flex-col gap-3'>
+          {canEditOrderItems && (
+            <button type='button' onClick={() => handleDeleteOrder(order._id)} className='admin-button-danger w-fit px-3 py-2 text-sm'>Cancelar pedido</button>
+          )}
+          <div>
+            <p className='admin-kicker'>Pedido {order.orderNumber || `#${order._id?.slice(-6)}`}</p>
+            <h3 className='mt-1 text-xl font-black text-[#e0e0e0]'>{formatDate(order.createdAt)}</h3>
+            <p className='mt-1 text-base font-semibold text-[#e0e0e0]'>{
+              order?.table?.name?.trim()
+                ? `Mesa: ${order.table.name}`
+                : order?.table?.number
+                  ? `Mesa: ${order.table.number}`
+                  : 'Sin mesa'
+            }</p>
+          </div>
+        </div>
+        <div className='flex flex-col gap-2'>
+          <select value={normalizeOrderStatus(order.status)} onChange={(event) => handleStatusChange(order._id, event.target.value)} className='admin-input px-3 py-2 text-sm font-semibold'>
+            {deliveryStatusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
+          </select>
+          <button type='button' onClick={() => printFullOrderToKitchen(order, restaurant)} className='admin-button-secondary px-3 py-2 text-sm'>Imprimir comanda completa</button>
+          <button type='button' onClick={() => downloadOrderPdf(order)} className='admin-button-secondary px-3 py-2 text-sm'>Guardar PDF</button>
+          {canEditOrderItems && (
+            <button type='button' onClick={() => openEditor(order)} className='admin-button-secondary px-3 py-2 text-sm'>Editar</button>
+          )}
+        </div>
+      </div>
+      <div className='mt-4 space-y-2'>
+        {order.items?.filter((item) => !(item.isIncluded && item.hideInBebidas)).map((item) => (
+          <div key={`${order._id}-${item.menuItem?._id || item.label || item.menuItem}`} className='rounded-2xl border border-[#e6be7d]/10 bg-[#e6be7d]/20 p-3'>
+            <div className='flex items-center justify-between gap-4'>
+                <div className='flex items-center gap-2'>
+                  <span className='font-extrabold text-[#e0e0e0]'>{item.quantity}× {item.menuItem?.name || item.label || 'Platillo'}</span>
+                  {item.delivered && (
+                    <span className='inline-block rounded-full bg-[#ECFDF5] px-2 py-0.5 text-xs font-semibold text-[#065F46]'>Entregado</span>
+                  )}
+                </div>
+                <span className='text-sm font-bold text-[#e0e0e0]'>{formatCurrency(Number(item.price || 0) * Number(item.quantity || 0))}</span>
+              </div>
+            {item.observations && <p className='mt-2 text-xs text-[#e0e0e0]'>Obs.: {item.observations}</p>}
+          </div>
+        ))}
+        {order.observations && <p className='rounded-2xl bg-[#e6be7d]/14 px-3 py-2 text-sm text-[#e0e0e0]'>Observaciones: {order.observations}</p>}
+        {editingOrderId === order._id && (
+          <div className='mt-4 rounded-2xl border border-dashed border-[#e6be7d]/20 bg-[#141426]/95 p-4'>
+            <h4 className='mb-3 font-bold text-[#e0e0e0]'>Editar pedido</h4>
+            {editingItems.map((it, idx) => (
+              <div key={`${order._id}-edit-${idx}`} className='mb-3 flex items-center justify-between gap-3'>
+                <div>
+                  <div className='font-bold'>{it.name}</div>
+                  <input value={it.observations} onChange={(e) => changeEditingObservations(idx, e.target.value)} placeholder='Obs. del platillo' className='admin-input mt-1 w-full px-2 py-1 text-sm' />
+                </div>
+                <div className='flex items-center gap-2'>
+                  <button type='button' onClick={() => changeEditingQuantity(idx, -1)} className='admin-button-secondary px-2 py-1'>-</button>
+                  <div className='px-3 font-black'>{it.quantity}</div>
+                  <button type='button' onClick={() => changeEditingQuantity(idx, 1)} className='admin-button-secondary px-2 py-1'>+</button>
+                  <button type='button' onClick={() => removeEditingItem(idx)} className='admin-button-secondary px-2 py-1 text-xs'>Quitar</button>
+                </div>
+              </div>
+            ))}
+
+            <div className='mt-2'>
+              <label className='block text-sm text-[#e6be7d] mb-2'>Agregar platillo</label>
+              <select value={selectedMenuItemId} onChange={(e) => {
+                const selectedValue = e.target.value;
+                if (!selectedValue) {
+                  setSelectedMenuItemId('');
+                  return;
+                }
+                addMenuItemToEditing(selectedValue);
+                setSelectedMenuItemId('');
+              }} className='admin-input w-full px-3 py-2 text-sm relative z-20'>
+                <option value='' disabled hidden>Elige un platillo</option>
+                {menuItems.map((m) => <option key={m._id} value={m._id}>{m.name} — {formatCurrency(m.price)}</option>)}
+              </select>
+            </div>
+
+            <div className='mt-4 flex items-center gap-2'>
+              <button type='button' onClick={submitEditedOrder} disabled={editingLoading} className='admin-button-primary px-4 py-2'>{editingLoading ? 'Guardando...' : 'Guardar cambios'}</button>
+              <button type='button' onClick={closeEditor} disabled={editingLoading} className='admin-button-secondary px-4 py-2'>Cancelar</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </article>
+  );
+
   if (loading) return <Spinner />;
 
   return (
@@ -968,7 +1129,9 @@ export const Orders = () => {
                 : view === 'kitchen'
                   ? 'Visualiza los pedidos de cocina pendientes y cambia su estado en tiempo real.'
                   : view === 'entregas'
-                    ? 'Muestra todos los pedidos pendientes para entrega, incluso si no están listos ambos lados.'
+                    ? (selectedDeliveryTableId
+                        ? 'Pedidos pendientes de entrega para esta mesa.'
+                        : 'Elige una mesa para ver sus pedidos pendientes de entrega.')
                     : 'Consulta el historial completo del restaurante con filtros por estado.'}
           </p>
         </div>
@@ -1145,11 +1308,14 @@ export const Orders = () => {
                 className='admin-input w-full px-3 py-3 text-sm'
               >
                 <option value=''>Elige una mesa</option>
-                {tables.map((table) => (
-                  <option key={table._id} value={table._id}>
-                    {table.name?.trim() ? table.name : `Mesa ${table.number}`}
-                  </option>
-                ))}
+                {sortedTables.map((table) => {
+                  const occupied = isTableOccupied(table._id);
+                  return (
+                    <option key={table._id} value={table._id} disabled={occupied}>
+                      {getTableLabel(table)}{occupied ? ' (Ocupada)' : ''}
+                    </option>
+                  );
+                })}
               </select>
             </label>
 
@@ -1221,7 +1387,7 @@ export const Orders = () => {
         </div>
       )}
 
-      {['bebidas', 'kitchen', 'entregas'].includes(view) && (
+      {['bebidas', 'kitchen'].includes(view) && (
         <section className='grid gap-4 xl:grid-cols-2'>
           {filteredOrders.map((order) => (
             <article key={order._id} className='admin-panel p-5'>
@@ -1255,18 +1421,6 @@ export const Orders = () => {
                       <button type='button' onClick={() => printToStation(order, 'kitchen', restaurant)} className='admin-button-secondary px-3 py-2 text-sm'>Reimprimir cocina</button>
                     </>
                   )}
-                  {view === 'entregas' && (
-                    <>
-                      <select value={normalizeOrderStatus(order.status)} onChange={(event) => handleStatusChange(order._id, event.target.value)} className='admin-input px-3 py-2 text-sm font-semibold'>
-                        {deliveryStatusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
-                      </select>
-                      <button type='button' onClick={() => printFullOrderToKitchen(order, restaurant)} className='admin-button-secondary px-3 py-2 text-sm'>Imprimir comanda completa</button>
-                      <button type='button' onClick={() => downloadOrderPdf(order)} className='admin-button-secondary px-3 py-2 text-sm'>Guardar PDF</button>
-                    </>
-                  )}
-                  {view === 'entregas' && canEditOrderItems && (
-                    <button type='button' onClick={() => openEditor(order)} className='admin-button-secondary px-3 py-2 text-sm'>Editar</button>
-                  )}
                 </div>
               </div>
               <div className='mt-4 space-y-2'>
@@ -1274,10 +1428,8 @@ export const Orders = () => {
                   // Exclude included items explicitly hidden (tostadas) everywhere
                   if (item.isIncluded && item.hideInBebidas) return false;
                   // In 'bebidas' and 'kitchen' we show only pending items.
-                  // In 'entregas' we must show all items (delivered and pending), except hidden ones.
                   if (view === 'bebidas') return isDrinkItem(item) && !item.delivered;
                   if (view === 'kitchen') return !isDrinkItem(item) && !item.delivered;
-                  if (view === 'entregas') return true;
                   return true;
                 }).map((item) => (
                   <div key={`${order._id}-${item.menuItem?._id || item.label || item.menuItem}`} className='rounded-2xl border border-[#e6be7d]/10 bg-[#e6be7d]/20 p-3'>
@@ -1294,46 +1446,6 @@ export const Orders = () => {
                   </div>
                 ))}
                 {order.observations && <p className='rounded-2xl bg-[#e6be7d]/14 px-3 py-2 text-sm text-[#e0e0e0]'>Observaciones: {order.observations}</p>}
-                {editingOrderId === order._id && (
-                  <div className='mt-4 rounded-2xl border border-dashed border-[#e6be7d]/20 bg-[#141426]/95 p-4'>
-                    <h4 className='mb-3 font-bold text-[#e0e0e0]'>Editar pedido</h4>
-                    {editingItems.map((it, idx) => (
-                      <div key={`${order._id}-edit-${idx}`} className='mb-3 flex items-center justify-between gap-3'>
-                        <div>
-                          <div className='font-bold'>{it.name}</div>
-                          <input value={it.observations} onChange={(e) => changeEditingObservations(idx, e.target.value)} placeholder='Obs. del platillo' className='admin-input mt-1 w-full px-2 py-1 text-sm' />
-                        </div>
-                        <div className='flex items-center gap-2'>
-                          <button type='button' onClick={() => changeEditingQuantity(idx, -1)} className='admin-button-secondary px-2 py-1'>-</button>
-                          <div className='px-3 font-black'>{it.quantity}</div>
-                          <button type='button' onClick={() => changeEditingQuantity(idx, 1)} className='admin-button-secondary px-2 py-1'>+</button>
-                          <button type='button' onClick={() => removeEditingItem(idx)} className='admin-button-secondary px-2 py-1 text-xs'>Quitar</button>
-                        </div>
-                      </div>
-                    ))}
-
-                    <div className='mt-2'>
-                      <label className='block text-sm text-[#e6be7d] mb-2'>Agregar platillo</label>
-                      <select value={selectedMenuItemId} onChange={(e) => {
-                        const selectedValue = e.target.value;
-                        if (!selectedValue) {
-                          setSelectedMenuItemId('');
-                          return;
-                        }
-                        addMenuItemToEditing(selectedValue);
-                        setSelectedMenuItemId('');
-                      }} className='admin-input w-full px-3 py-2 text-sm relative z-20'>
-                        <option value='' disabled hidden>Elige un platillo</option>
-                        {menuItems.map((m) => <option key={m._id} value={m._id}>{m.name} — {formatCurrency(m.price)}</option>)}
-                      </select>
-                    </div>
-
-                    <div className='mt-4 flex items-center gap-2'>
-                      <button type='button' onClick={submitEditedOrder} disabled={editingLoading} className='admin-button-primary px-4 py-2'>{editingLoading ? 'Guardando...' : 'Guardar cambios'}</button>
-                      <button type='button' onClick={closeEditor} disabled={editingLoading} className='admin-button-secondary px-4 py-2'>Cancelar</button>
-                    </div>
-                  </div>
-                )}
               </div>
             </article>
           ))}
@@ -1341,11 +1453,64 @@ export const Orders = () => {
             <div className='admin-panel p-8 text-sm text-[#e6be7d]'>{
               view === 'bebidas'
                 ? 'No hay bebidas ni postres pendientes.'
-                : view === 'kitchen'
-                  ? 'No hay pedidos pendientes en cocina.'
-                  : 'No hay pedidos listos para entrega.'
+                : 'No hay pedidos pendientes en cocina.'
             }</div>
           )}
+        </section>
+      )}
+
+      {view === 'entregas' && !selectedDeliveryTableId && (
+        <section>
+          <div className='mb-5 flex flex-wrap items-center gap-4'>
+            <span className='flex items-center gap-2 text-sm font-semibold text-[#e0e0e0]'>
+              <span className='inline-block h-3.5 w-3.5 rounded-full bg-[#22c55e]'></span> Mesa disponible
+            </span>
+            <span className='flex items-center gap-2 text-sm font-semibold text-[#e0e0e0]'>
+              <span className='inline-block h-3.5 w-3.5 rounded-full bg-[#ef4444]'></span> Mesa ocupada
+            </span>
+          </div>
+          <div className='grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5'>
+            {sortedTables.map((table) => {
+              const occupied = isTableOccupied(table._id);
+              return (
+                <button
+                  key={table._id}
+                  type='button'
+                  onClick={() => setSelectedDeliveryTableId(table._id)}
+                  className={`rounded-3xl border-2 p-6 text-center shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg ${
+                    occupied
+                      ? 'border-[#ef4444]/60 bg-[#ef4444]/15 text-[#fecaca]'
+                      : 'border-[#22c55e]/60 bg-[#22c55e]/15 text-[#bbf7d0]'
+                  }`}
+                >
+                  <div className='text-lg font-black'>{getTableLabel(table)}</div>
+                  <div className='mt-1 text-xs font-bold uppercase tracking-[0.2em]'>
+                    {occupied ? 'Ocupada' : 'Disponible'}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          {sortedTables.length === 0 && (
+            <div className='admin-panel p-8 text-sm text-[#e6be7d]'>No hay mesas registradas todavía. Agrégalas en la sección de Mesas.</div>
+          )}
+        </section>
+      )}
+
+      {view === 'entregas' && selectedDeliveryTableId && (
+        <section>
+          <div className='mb-5 flex flex-wrap items-center justify-between gap-3'>
+            <button type='button' onClick={() => setSelectedDeliveryTableId(null)} className='admin-button-secondary px-4 py-2 text-sm'>← Volver a mesas</button>
+            <h2 className='text-xl font-black text-[#e0e0e0]'>
+              {selectedDeliveryTable ? getTableLabel(selectedDeliveryTable) : 'Mesa'}
+            </h2>
+          </div>
+          <div className='grid gap-4 xl:grid-cols-2'>
+            {deliveryOrdersForSelectedTable.map(renderDeliveryOrderCard)}
+            {deliveryOrdersForSelectedTable.length === 0 && (
+              <div className='admin-panel p-8 text-sm text-[#e6be7d]'>Esta mesa no tiene pedidos pendientes de entrega.</div>
+            )}
+          </div>
         </section>
       )}
 
