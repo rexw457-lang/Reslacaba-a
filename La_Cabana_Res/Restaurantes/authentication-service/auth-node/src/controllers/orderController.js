@@ -2,12 +2,16 @@ import Order from "../models/Order.js";
 import MenuItem from "../models/MenuItem.js";
 import Table from "../models/Table.js";
 
-const INCLUDED_FREE_TORTILLAS_LABEL = "Tortillas de caldo de mariscos";
 const INCLUDED_FREE_TOSTADAS_LABEL = "Tostadas de ceviche";
 const BEVERAGE_CATEGORY_KEYWORDS = ["bebidas", "postres"];
 const BEVERAGE_NAME_KEYWORDS = ["tortilla", "tortillas", "tostada", "tostadas"];
-const CALDO_KEYWORD = "caldo";
 const CEVICHE_KEYWORD = "ceviche";
+// Cantidad de tortillas que trae cada plato fuerte. Por defecto son 5;
+// pechugas y alitas llevan solo 4. Si en el futuro se agrega otro platillo
+// con una cantidad distinta, solo hay que sumarlo aquí.
+const FOUR_TORTILLAS_KEYWORDS = ["pechuga", "alita"]; // "alita" cubre "Alitas ..." también
+const DEFAULT_TORTILLAS_PER_MAIN_COURSE = 5;
+const REDUCED_TORTILLAS_PER_MAIN_COURSE = 4;
 
 const normalizeStatus = (status) => {
     if (!status) return "Pendiente";
@@ -53,20 +57,29 @@ const isDrinkOrderItem = (item) => {
     return isDrinkItemFromMenu(item.menuItem);
 };
 
-const isCaldoItem = (menuItem) => !!menuItem && String(menuItem.name || "").toLowerCase().includes(CALDO_KEYWORD);
 const isCevicheItem = (menuItem) => !!menuItem && String(menuItem.name || "").toLowerCase().includes(CEVICHE_KEYWORD);
 const isMainCourseItem = (menuItem) => {
     if (!menuItem) return false;
     const category = String(menuItem.category || "").toLowerCase();
     const name = String(menuItem.name || "").toLowerCase();
+    // Los ceviches son "Platos Fuertes" en la categoría, pero llevan tostadas
+    // en vez de tortillas (ver INCLUDED_FREE_TOSTADAS_LABEL más abajo), así
+    // que se excluyen de aquí para no generarles también tortillas.
     return category.includes("platos fuertes") && !name.includes("ceviche");
+};
+
+// Pechugas y alitas llevan 4 tortillas; el resto de platos fuertes (caldos,
+// camarones, mojarras, costillas, mar y tierra, etc.) llevan 5.
+const getTortillasPerMainCourse = (name) => {
+    const lowerName = String(name || "").toLowerCase();
+    if (FOUR_TORTILLAS_KEYWORDS.some((keyword) => lowerName.includes(keyword))) {
+        return REDUCED_TORTILLAS_PER_MAIN_COURSE;
+    }
+    return DEFAULT_TORTILLAS_PER_MAIN_COURSE;
 };
 
 const ensureIncludedFreeItemsForOrder = ({ items, existingDeliveredIncludedItems = [] }) => {
     const preservedLabels = new Set(existingDeliveredIncludedItems.map((it) => it.label));
-    const caldoQuantity = items.reduce((total, it) => {
-        return isCaldoItem(it.menuItemDoc || it.menuItem) ? total + Number(it.quantity || 1) : total;
-    }, 0);
     const hasCeviche = items.some((it) => isCevicheItem(it.menuItemDoc || it.menuItem));
 
     const preserved = existingDeliveredIncludedItems.map((it) => ({
@@ -80,18 +93,6 @@ const ensureIncludedFreeItemsForOrder = ({ items, existingDeliveredIncludedItems
     }));
 
     const includedItems = [...preserved];
-
-    if (caldoQuantity > 0 && !preservedLabels.has(INCLUDED_FREE_TORTILLAS_LABEL)) {
-        includedItems.push({
-            label: INCLUDED_FREE_TORTILLAS_LABEL,
-            quantity: caldoQuantity,
-            price: 0,
-            observations: "",
-            delivered: false,
-            isIncluded: true,
-            hideInBebidas: false,
-        });
-    }
 
     if (hasCeviche && !preservedLabels.has(INCLUDED_FREE_TOSTADAS_LABEL)) {
         includedItems.push({
@@ -108,11 +109,12 @@ const ensureIncludedFreeItemsForOrder = ({ items, existingDeliveredIncludedItems
     const mainCourseMap = new Map();
     items.forEach((it) => {
         const menuItem = it.menuItemDoc || it.menuItem;
-        if (!isMainCourseItem(menuItem) || isCaldoItem(menuItem)) return;
+        if (!isMainCourseItem(menuItem)) return;
         const label = String(menuItem.name || it.label || '').trim();
         if (!label) return;
+        const tortillasPerUnit = getTortillasPerMainCourse(label);
         const existing = mainCourseMap.get(label) || { quantity: 0, label };
-        existing.quantity += Number(it.quantity || 1);
+        existing.quantity += Number(it.quantity || 1) * tortillasPerUnit;
         mainCourseMap.set(label, existing);
     });
 
