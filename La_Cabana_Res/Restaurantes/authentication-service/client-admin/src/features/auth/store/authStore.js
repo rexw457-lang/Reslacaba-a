@@ -115,7 +115,11 @@ export const useAuthStore = create(
     }),
     {
       name: 'auth-KS-IN6AM-session',
-      storage: createJSONStorage(() => sessionStorage),
+      // Antes: sessionStorage. Si Android mataba el proceso de la APK
+      // en segundo plano (ahorro de batería), sessionStorage se perdía
+      // y la app volvía siempre al login. localStorage persiste aunque
+      // se reinicie el proceso de la app.
+      storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         user: state.user,
         token: state.token,
