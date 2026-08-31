@@ -2,10 +2,8 @@ import Order from "../models/Order.js";
 import MenuItem from "../models/MenuItem.js";
 import Table from "../models/Table.js";
 
-const INCLUDED_FREE_TOSTADAS_LABEL = "Tostadas de ceviche";
 const BEVERAGE_CATEGORY_KEYWORDS = ["bebidas", "postres"];
 const BEVERAGE_NAME_KEYWORDS = ["tortilla", "tortillas", "tostada", "tostadas"];
-const CEVICHE_KEYWORD = "ceviche";
 // Cantidad de tortillas que trae cada plato fuerte. Por defecto son 5;
 // pechugas y alitas llevan solo 4. Si en el futuro se agrega otro platillo
 // con una cantidad distinta, solo hay que sumarlo aquí.
@@ -57,14 +55,15 @@ const isDrinkOrderItem = (item) => {
     return isDrinkItemFromMenu(item.menuItem);
 };
 
-const isCevicheItem = (menuItem) => !!menuItem && String(menuItem.name || "").toLowerCase().includes(CEVICHE_KEYWORD);
 const isMainCourseItem = (menuItem) => {
     if (!menuItem) return false;
     const category = String(menuItem.category || "").toLowerCase();
     const name = String(menuItem.name || "").toLowerCase();
     // Los ceviches son "Platos Fuertes" en la categoría, pero llevan tostadas
-    // en vez de tortillas (ver INCLUDED_FREE_TOSTADAS_LABEL más abajo), así
-    // que se excluyen de aquí para no generarles también tortillas.
+    // en vez de tortillas, así que se excluyen de aquí para no generarles
+    // también tortillas. La comanda de cocina ya no agrega un ítem aparte
+    // de "tostadas": con ver "Ceviche" en el nombre del platillo, cocina ya
+    // sabe que debe servirlo con tostadas.
     return category.includes("platos fuertes") && !name.includes("ceviche");
 };
 
@@ -80,7 +79,6 @@ const getTortillasPerMainCourse = (name) => {
 
 const ensureIncludedFreeItemsForOrder = ({ items, existingDeliveredIncludedItems = [] }) => {
     const preservedLabels = new Set(existingDeliveredIncludedItems.map((it) => it.label));
-    const hasCeviche = items.some((it) => isCevicheItem(it.menuItemDoc || it.menuItem));
 
     const preserved = existingDeliveredIncludedItems.map((it) => ({
         label: it.label,
@@ -93,18 +91,6 @@ const ensureIncludedFreeItemsForOrder = ({ items, existingDeliveredIncludedItems
     }));
 
     const includedItems = [...preserved];
-
-    if (hasCeviche && !preservedLabels.has(INCLUDED_FREE_TOSTADAS_LABEL)) {
-        includedItems.push({
-            label: INCLUDED_FREE_TOSTADAS_LABEL,
-            quantity: 1,
-            price: 0,
-            observations: "",
-            delivered: false,
-            isIncluded: true,
-            hideInBebidas: true,
-        });
-    }
 
     const mainCourseMap = new Map();
     items.forEach((it) => {
