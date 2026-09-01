@@ -157,7 +157,6 @@ const seedBaseMenuItems = async () => {
             { name: "Té (variedad)", category: "Bebidas calientes", description: "Té de variedad.", price: 15, available: true },
             { name: "Chocolate", category: "Bebidas calientes", description: "Chocolate caliente.", price: 18, available: true },
             { name: "Café", category: "Bebidas calientes", description: "Café de la casa.", price: 15, available: true },
-            { name: "Soda (variedad)", category: "Bebidas frias", description: "Soda.", price: 10, available: true },
             { name: "Limonada", category: "Bebidas frias", description: "Limonada fresca.", price: 15, available: true },
             { name: "Naranjada", category: "Bebidas frias", description: "Naranjada.", price: 15, available: true },
             { name: "Jamaica", category: "Bebidas frias", description: "Jamaica.", price: 15, available: true },
