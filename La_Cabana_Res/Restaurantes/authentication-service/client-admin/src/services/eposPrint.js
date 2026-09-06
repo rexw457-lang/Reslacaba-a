@@ -24,7 +24,6 @@
 
 import {
   TEMPLATE_PX,
-  HEADER_IMAGE_URL,
   COLS_PX,
   META_FONT_PX,
   COLUMNS_HEADER_FONT_PX,
@@ -42,20 +41,6 @@ import {
   createTextMeasurer,
   buildComandaLayout,
 } from './comandaLayout.js';
-
-let cachedHeaderImage = null;
-const loadHeaderImage = () =>
-  new Promise((resolve, reject) => {
-    if (cachedHeaderImage) return resolve(cachedHeaderImage);
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      cachedHeaderImage = img;
-      resolve(img);
-    };
-    img.onerror = reject;
-    img.src = HEADER_IMAGE_URL;
-  });
 
 /** Reparte `text` en varias líneas de máximo `maxWidth` px, para el canvas. */
 const wrapText = (ctx, text, maxWidth) => {
@@ -81,7 +66,6 @@ const wrapText = (ctx, text, maxWidth) => {
  * mandarlo a la impresora.
  */
 export const buildTicketCanvas = async (order, scope, { isDrinkItem }) => {
-  const header = await loadHeaderImage();
   // Mismo measurer (mismo font/tamaño) que usa buildComandaLayout para
   // decidir dónde partir los nombres largos en 2 líneas, así el cálculo de
   // posiciones y el dibujo real quedan siempre de acuerdo.
@@ -93,10 +77,11 @@ export const buildTicketCanvas = async (order, scope, { isDrinkItem }) => {
   canvas.height = layout.pageHeightPx;
   const ctx = canvas.getContext('2d');
 
-  // Fondo blanco + header de marca (logo + nombre del restaurante)
+  // Fondo blanco. Ya no se dibuja el header de marca (logo + nombre del
+  // restaurante): se quitó por pedido explícito, así que el ticket arranca
+  // directo con los datos del pedido (ver META_TOP_PX en comandaLayout.js).
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(header, 0, 0, canvas.width, layout.headerHeightPx);
 
   ctx.fillStyle = '#000000';
   ctx.textBaseline = 'top';

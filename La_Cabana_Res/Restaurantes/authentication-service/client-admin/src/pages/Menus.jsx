@@ -20,6 +20,9 @@ import platosFuertesImg from '../assets/img/PlatoFuerte.png';
 import postresImg from '../assets/img/Postres.png';
 import hamburguesasImg from '../assets/img/hamburguesas.png';
 import extrasImg from '../assets/img/extras.jpg';
+import licuadosImg from '../assets/img/licuados.jpg';
+import sodasImg from '../assets/img/sodas.jpg';
+import bebidasNaturalesImg from '../assets/img/bebidas-naturales.jpg';
 
 const emptyMenu = {
   name: '',
@@ -44,6 +47,9 @@ const menuCategoryImages = {
   'hamburguesas': hamburguesasImg,
   'especiales': extrasImg,
   'starbucks': bebidasStarbucksImg,
+  'licuados': licuadosImg,
+  'sodas': sodasImg,
+  'bebidas naturales': bebidasNaturalesImg,
   general: '/placeholder-image.svg',
 };
 

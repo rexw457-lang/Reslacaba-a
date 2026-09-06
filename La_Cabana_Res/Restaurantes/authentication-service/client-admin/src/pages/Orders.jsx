@@ -6,7 +6,6 @@ import * as XLSX from 'xlsx';
 import { printToEposStation, buildTicketCanvas } from '../services/eposPrint.js';
 import {
   TEMPLATE_PX,
-  HEADER_IMAGE_URL,
   COLS_PX,
   META_FONT_PX,
   COLUMNS_HEADER_FONT_PX,
@@ -44,6 +43,9 @@ import platosFuertesImg from '../assets/img/PlatoFuerte.png';
 import postresImg from '../assets/img/Postres.png';
 import hamburguesasImg from '../assets/img/hamburguesas.png';
 import extrasImg from '../assets/img/extras.jpg';
+import licuadosImg from '../assets/img/licuados.jpg';
+import sodasImg from '../assets/img/sodas.jpg';
+import bebidasNaturalesImg from '../assets/img/bebidas-naturales.jpg';
 
 const formatDate = (value) => new Date(value).toLocaleString('es-GT', { dateStyle: 'medium', timeStyle: 'short' });
 const formatDayLabel = (value) =>
@@ -137,8 +139,6 @@ const generateOrderPrintHtml = (order, scope = 'full') => {
     )
     .join('');
 
-  const headerImageUrl = new URL(HEADER_IMAGE_URL, window.location.origin).href;
-
   return `
     <html lang="es">
       <head>
@@ -150,7 +150,6 @@ const generateOrderPrintHtml = (order, scope = 'full') => {
           html, body { width: ${PAGE_WIDTH_MM}mm; height: ${pageHeightMm}mm; margin: 0; padding: 0; background: #fff; }
           body { font-family: Arial, Helvetica, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .page { position: relative; width: ${PAGE_WIDTH_MM}mm; height: ${pageHeightMm}mm; background: #fff; }
-          .header-img { position: absolute; top: 0; left: 0; width: ${PAGE_WIDTH_MM}mm; height: ${mm(layout.headerHeightPx)}mm; object-fit: contain; }
           .overlay { position: absolute; inset: 0; pointer-events: none; }
           .field { position: absolute; display: flex; flex-direction: column; }
           .value { font-weight: 700; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #000; }
@@ -166,7 +165,6 @@ const generateOrderPrintHtml = (order, scope = 'full') => {
       </head>
       <body>
         <div class="page">
-          <img src="${headerImageUrl}" class="header-img" alt="La Cabaña Restaurante" />
           <div class="overlay">
             ${layout.isToGo ? `<div class="togo-banner">${TOGO_LABEL}</div>` : ''}
             ${metaHtml}
@@ -444,6 +442,9 @@ const menuCategoryImages = {
   hamburguesas: hamburguesasImg,
   extras: extrasImg,
   especiales: extrasImg,
+  licuados: licuadosImg,
+  sodas: sodasImg,
+  'bebidas naturales': bebidasNaturalesImg,
   general: '/placeholder-image.svg',
 };
 

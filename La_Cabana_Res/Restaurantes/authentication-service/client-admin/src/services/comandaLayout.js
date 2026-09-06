@@ -1,9 +1,9 @@
-// Plantilla de comanda "limpia": header de marca (imagen fija) + todo lo demás
-// (datos del pedido, artículos, totales) dibujado en código con tipografía
-// grande y jerarquía clara. A diferencia de la plantilla anterior (una foto
-// de una comanda preimpresa con casillas pequeñas), aquí SOLO el encabezado
-// (logo + "LA CABAÑA RESTAURANTE") es una imagen; todo el resto se calcula
-// en `buildComandaLayout` para que el ticket:
+// Plantilla de comanda "limpia": SIN logo/encabezado de imagen — todo
+// (datos del pedido, artículos, totales) se dibuja en código con tipografía
+// grande y jerarquía clara. Antes el encabezado (logo + "LA CABAÑA
+// RESTAURANTE") era una imagen fija; se quitó por pedido explícito, así que
+// ahora el ticket arranca directo con los datos del pedido. `buildComandaLayout`
+// calcula todo para que el ticket:
 //   - use letras más grandes y con más aire (más legible en el rollo térmico)
 //   - le dé prioridad visual a los datos del pedido (Mesero, No. Pedido,
 //     Fecha, Mesa) en vez de a casillas y líneas de una comanda de papel
@@ -31,11 +31,15 @@
 // ese doble reescalado: el texto se ve nítido porque se dibuja una sola
 // vez, ya al tamaño final.
 export const TEMPLATE_PX = { width: 576 };
-export const HEADER_IMAGE_URL = '/comanda-header.jpg';
-// La imagen original (comanda-header.jpg) mide 688x250px; al dibujarse en
-// un lienzo de 576px de ancho hay que reducir también su alto en la misma
-// proporción (576/688) para que el logo no salga achatado/deformado.
-export const HEADER_HEIGHT_PX = 210;
+// Ya NO se imprime el logo/encabezado (comanda-header.jpg): por pedido
+// explícito, el ticket sale sin ese header de marca. HEADER_HEIGHT_PX queda
+// en 0 en vez de borrar la constante por completo, porque `buildComandaLayout`
+// y ambas rutas de impresión (eposPrint.js / Orders.jsx) la usan como punto
+// de referencia para acomodar todo lo demás; con 0 simplemente no reservan
+// espacio para ningún header y el ticket arranca arriba de todo con un
+// pequeño margen (ver META_TOP_PX) en vez de dejar un hueco en blanco donde
+// antes iba el logo.
+export const HEADER_HEIGHT_PX = 0;
 
 const MARGIN_X = 28;
 const RIGHT_X = TEMPLATE_PX.width - MARGIN_X; // 548
@@ -50,7 +54,10 @@ export const TOGO_FONT_PX = 52; // antes 26 (2x)
 export const TOGO_LABEL = 'PARA LLEVAR';
 
 // --- Datos del pedido (Mesero / No. Pedido / Fecha / Mesa) ---
-const META_TOP_PX = 246; // antes 226 (+20 de aire extra bajo el header, que no cambia de tamaño)
+// Antes valía 246 (= HEADER_HEIGHT_PX de 210 + 36 de aire bajo el logo). Sin
+// header, se deja solo un margen chico arriba del ticket para que no quede
+// pegado al borde del papel.
+const META_TOP_PX = 40;
 const META_LINE_HEIGHT_PX = 68; // antes 34 (2x, para que las líneas no se encimen con la letra más grande)
 export const META_FONT_PX = 40; // antes 20 (2x)
 const META_ROWS = 4; // Mesero, No. Pedido, Fecha, Mesa
