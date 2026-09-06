@@ -39,6 +39,7 @@ const formatCurrency = (value) =>
 
 const menuCategoryImages = {
   'bebidas calientes': bebidasCalientesImg,
+  'bebidas calientes (starbucks)': bebidasStarbucksImg,
   'bebidas frías': bebidasFriasImg,
   'bebidas frias': bebidasFriasImg,
   'entradas': entradasImg,
@@ -53,6 +54,26 @@ const menuCategoryImages = {
   general: '/placeholder-image.svg',
 };
 
+// Se buscan de la MÁS específica a la MENOS específica (por longitud de la
+// clave) para que, por ejemplo, "bebidas calientes (starbucks)" no termine
+// resolviendo por accidente en la imagen de "bebidas calientes" cuando en
+// realidad hay una clave más exacta que sí aplica.
+const sortedCategoryKeys = Object.keys(menuCategoryImages)
+  .filter((key) => key !== 'general')
+  .sort((a, b) => b.length - a.length);
+
+// Resuelve la imagen de una categoría admitiendo variantes como
+// "Bebidas - Licuados", "Bebidas Licuados", etc.: primero busca coincidencia
+// EXACTA (como antes) y, si no la hay, busca si el texto de la categoría
+// CONTIENE alguna de las palabras clave conocidas (licuados, sodas, etc.).
+// Así no depende de que el nombre de la categoría se escriba idéntico a la
+// clave, solo de que incluya la palabra.
+const resolveCategoryImage = (categoryKey) => {
+  if (menuCategoryImages[categoryKey]) return menuCategoryImages[categoryKey];
+  const matchedKey = sortedCategoryKeys.find((key) => categoryKey.includes(key));
+  return matchedKey ? menuCategoryImages[matchedKey] : null;
+};
+
 const getMenuItemImageUrl = (item) => {
   if (!item) return '/placeholder-image.svg';
   if (item.image) {
@@ -62,12 +83,12 @@ const getMenuItemImageUrl = (item) => {
   }
 
   const categoryKey = (item.category || 'general').toString().trim().toLowerCase();
-  return menuCategoryImages[categoryKey] || menuCategoryImages.general;
+  return resolveCategoryImage(categoryKey) || menuCategoryImages.general;
 };
 
 const getCategoryImageUrl = (category) => {
   const key = category?.toString().trim().toLowerCase() || 'general';
-  return menuCategoryImages[key] || menuCategoryImages.general;
+  return resolveCategoryImage(key) || menuCategoryImages.general;
 };
 
 export const Menus = () => {

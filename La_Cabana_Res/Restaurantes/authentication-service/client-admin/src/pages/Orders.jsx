@@ -450,7 +450,15 @@ const menuCategoryImages = {
 
 const getCategoryImageUrl = (category) => {
   const key = category?.toString().trim().toLowerCase() || 'general';
-  return menuCategoryImages[key] || menuCategoryImages.general;
+  if (menuCategoryImages[key]) return menuCategoryImages[key];
+  // Igual que en Menus.jsx: admite categorías con prefijo/sufijo, p. ej.
+  // "Bebidas - Licuados", buscando si el texto CONTIENE alguna palabra
+  // clave conocida, de la más específica a la menos específica.
+  const matchedKey = Object.keys(menuCategoryImages)
+    .filter((k) => k !== 'general')
+    .sort((a, b) => b.length - a.length)
+    .find((k) => key.includes(k));
+  return matchedKey ? menuCategoryImages[matchedKey] : menuCategoryImages.general;
 };
 
 const isDrinkItem = (item) => {
@@ -749,6 +757,20 @@ export const Orders = () => {
   }, [orders]);
 
   const isTableOccupied = (tableId) => occupiedTableIds.has(String(tableId));
+
+  // Suma de los pedidos ACTIVOS de cada mesa (Pendiente/Preparando), para
+  // mostrar de una vez el total de la cuenta en el tablero de Entregas, sin
+  // tener que entrar mesa por mesa a buscarlo en el historial.
+  const tableTotals = useMemo(() => {
+    const totals = new Map();
+    orders.forEach((order) => {
+      if (!isOrderActive(order)) return;
+      const tableId = String(getOrderTableId(order) || '');
+      if (!tableId) return;
+      totals.set(tableId, (totals.get(tableId) || 0) + Number(order.total || 0));
+    });
+    return totals;
+  }, [orders]);
 
   // Mesas ordenadas por número, para pintar el tablero de Entregas siempre
   // en el mismo orden.
@@ -1181,6 +1203,10 @@ export const Orders = () => {
           </div>
         ))}
         {order.observations && <p className='rounded-2xl bg-[#e6be7d]/14 px-3 py-2 text-sm text-[#e0e0e0]'>Observaciones: {order.observations}</p>}
+        <div className='mt-3 flex items-center justify-between gap-3 rounded-2xl border border-[#e6be7d]/25 bg-[#e6be7d]/10 px-4 py-3'>
+          <span className='text-sm font-bold uppercase tracking-wide text-[#e6be7d]'>Total del pedido</span>
+          <span className='text-lg font-black text-[#e0e0e0] tabular-nums'>{formatCurrency(order.total)}</span>
+        </div>
         {editingOrderId === order._id && (
           <div className='mt-4 rounded-2xl border border-dashed border-[#e6be7d]/20 bg-[#141426]/95 p-4'>
             <h4 className='mb-3 font-bold text-[#e0e0e0]'>Editar pedido</h4>
@@ -1627,25 +1653,36 @@ export const Orders = () => {
           </div>
           <div
             className='grid gap-4'
-            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}
+            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))' }}
           >
             {sortedTables.map((table) => {
               const occupied = isTableOccupied(table._id);
+              const tableTotal = tableTotals.get(String(table._id)) || 0;
               return (
                 <button
                   key={table._id}
                   type='button'
                   onClick={() => handleDeliveryTableClick(table)}
-                  className={`flex items-center justify-between gap-3 rounded-3xl border-2 px-6 py-6 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg ${
+                  className={`flex min-h-[132px] flex-col gap-3 rounded-3xl border-2 px-5 py-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg ${
                     occupied
                       ? 'border-[#ef4444]/60 bg-[#ef4444]/15 text-[#fecaca]'
                       : 'border-[#22c55e]/60 bg-[#22c55e]/15 text-[#bbf7d0]'
                   }`}
                 >
-                  <span className='text-lg font-black whitespace-nowrap'>{getTableLabel(table)}</span>
-                  <span className='shrink-0 whitespace-nowrap rounded-full bg-black/20 px-3 py-1.5 text-xs font-bold uppercase tracking-wide'>
-                    {occupied ? 'Ocupada' : 'Disponible'}
-                  </span>
+                  <div className='flex items-start justify-between gap-2'>
+                    <span className='min-w-0 flex-1 break-words text-lg font-black leading-tight'>
+                      {getTableLabel(table)}
+                    </span>
+                    <span className='shrink-0 whitespace-nowrap rounded-full bg-black/20 px-3 py-1.5 text-xs font-bold uppercase tracking-wide'>
+                      {occupied ? 'Ocupada' : 'Disponible'}
+                    </span>
+                  </div>
+                  {occupied && (
+                    <div className='mt-auto flex items-center justify-between gap-2 border-t border-white/15 pt-3'>
+                      <span className='text-xs font-bold uppercase tracking-wide opacity-80'>Total</span>
+                      <span className='text-xl font-black tabular-nums'>{formatCurrency(tableTotal)}</span>
+                    </div>
+                  )}
                 </button>
               );
             })}
@@ -1663,6 +1700,17 @@ export const Orders = () => {
             <h2 className='text-xl font-black text-[#e0e0e0]'>
               {selectedDeliveryTable ? getTableLabel(selectedDeliveryTable) : 'Mesa'}
             </h2>
+          </div>
+          <div className='admin-panel mb-5 flex flex-wrap items-center justify-between gap-3 px-6 py-5'>
+            <div>
+              <p className='admin-kicker'>Cuenta de la mesa</p>
+              <p className='mt-1 text-sm text-[#e6be7d]'>
+                {deliveryOrdersForSelectedTable.length} {deliveryOrdersForSelectedTable.length === 1 ? 'pedido activo' : 'pedidos activos'}
+              </p>
+            </div>
+            <span className='text-3xl font-black text-[#e0e0e0] tabular-nums'>
+              {formatCurrency(tableTotals.get(String(selectedDeliveryTableId)) || 0)}
+            </span>
           </div>
           <div className='grid gap-4 xl:grid-cols-2'>
             {deliveryOrdersForSelectedTable.map(renderDeliveryOrderCard)}
