@@ -243,6 +243,36 @@ const getStationConfig = (restaurant, station) =>
     ? { ip: restaurant?.printerKitchenIp, port: restaurant?.printerKitchenPort || 80 }
     : { ip: restaurant?.printerDrinksIp, port: restaurant?.printerDrinksPort || 80 };
 
+// CANDADO ANTI-DUPLICADOS ("por qué salieron 23 copias de una comanda"):
+// Ninguno de los botones de impresión (Reimprimir cocina/bebidas, Imprimir
+// comanda completa) deshabilitaba el botón mientras la petición a la
+// impresora estaba en curso. sendCanvasToPrinter (eposPrint.js) espera hasta
+// 10s (timeout=10000 en la URL del ePOS-Print) antes de resolver o fallar.
+// Si en ese momento la impresora estaba lenta / temporalmente sin red, el
+// mesero no veía ningún cambio visible y volvía a presionar el botón varias
+// veces seguidas "porque no salió nada" -> cada click disparaba su propio
+// printToEposStation en paralelo, todos esperando la misma impresora. En
+// cuanto la impresora volvía a responder, TODOS esos envíos pendientes se
+// resolvían casi al mismo tiempo y cada uno mandaba su propia copia del
+// ticket -> de ahí que al "reenviar" salieran muchas copias de golpe.
+// Este mapa recuerda, por pedido+estación, si ya hay un envío en curso, para
+// ignorar los clicks repetidos hasta que termine el anterior (éxito o error).
+const inFlightPrints = new Set();
+
+const withPrintLock = async (key, fn) => {
+  if (inFlightPrints.has(key)) {
+    // Ya hay un envío en curso para esta misma comanda/estación: ignoramos
+    // este click repetido en vez de mandar otra copia en paralelo.
+    return;
+  }
+  inFlightPrints.add(key);
+  try {
+    await fn();
+  } finally {
+    inFlightPrints.delete(key);
+  }
+};
+
 // Imprime en una estación (cocina o bebidas) A PETICIÓN DEL USUARIO (botón
 // "Reimprimir cocina/bebidas" o "Imprimir comanda completa"): si hay una
 // impresora ePOS configurada para esa estación, manda el ticket directo por
@@ -250,19 +280,20 @@ const getStationConfig = (restaurant, station) =>
 // estación (o la impresión ePOS falla), cae de vuelta al método anterior
 // (window.print()), para que SIEMPRE se pueda reimprimir manualmente aunque
 // esa impresora en particular todavía no esté conectada.
-const printToStation = async (order, scope, restaurant) => {
-  if (isEposReady(restaurant, scope)) {
-    try {
-      await printToEposStation(order, scope, getStationConfig(restaurant, scope), { isDrinkItem });
-      return;
-    } catch (err) {
-      showError(`No se pudo imprimir en la impresora de ${scope === 'kitchen' ? 'cocina' : 'bebidas'}: ${err.message}`);
-      // Si falla la impresora de red (apagada, IP incorrecta, etc.), seguimos
-      // con el respaldo de window.print() para no perder la comanda.
+const printToStation = async (order, scope, restaurant) =>
+  withPrintLock(`${order?._id}-${scope}`, async () => {
+    if (isEposReady(restaurant, scope)) {
+      try {
+        await printToEposStation(order, scope, getStationConfig(restaurant, scope), { isDrinkItem });
+        return;
+      } catch (err) {
+        showError(`No se pudo imprimir en la impresora de ${scope === 'kitchen' ? 'cocina' : 'bebidas'}: ${err.message}`);
+        // Si falla la impresora de red (apagada, IP incorrecta, etc.), seguimos
+        // con el respaldo de window.print() para no perder la comanda.
+      }
     }
-  }
-  printOrder(order, scope);
-};
+    printOrder(order, scope);
+  });
 
 // Imprime en una estación de forma AUTOMÁTICA (al confirmar un pedido nuevo,
 // o al mandar parte de un pedido). A diferencia de `printToStation`, esta
@@ -277,14 +308,15 @@ const printToStation = async (order, scope, restaurant) => {
 // Esto evita que, por ejemplo, quitar la IP de la impresora de bebidas haga
 // que se abra sola una ventana de impresión de bebidas en cada pedido nuevo,
 // y evita que un problema con la impresora de bebidas afecte a la de cocina.
-const autoPrintToStation = async (order, scope, restaurant) => {
-  if (!isEposReady(restaurant, scope)) return;
-  try {
-    await printToEposStation(order, scope, getStationConfig(restaurant, scope), { isDrinkItem });
-  } catch (err) {
-    showError(`No se pudo imprimir en la impresora de ${scope === 'kitchen' ? 'cocina' : 'bebidas'}: ${err.message}`);
-  }
-};
+const autoPrintToStation = async (order, scope, restaurant) =>
+  withPrintLock(`${order?._id}-${scope}`, async () => {
+    if (!isEposReady(restaurant, scope)) return;
+    try {
+      await printToEposStation(order, scope, getStationConfig(restaurant, scope), { isDrinkItem });
+    } catch (err) {
+      showError(`No se pudo imprimir en la impresora de ${scope === 'kitchen' ? 'cocina' : 'bebidas'}: ${err.message}`);
+    }
+  });
 
 // "Imprimir comanda completa" (Entregas / Historial) SIEMPRE sale por la
 // impresora de bebidas cuando está configurada -- es la que está junto al
@@ -294,20 +326,21 @@ const autoPrintToStation = async (order, scope, restaurant) => {
 // impresora de bebidas no está configurada o falla, cae al respaldo de
 // siempre (window.print()), desde donde también se puede elegir "Guardar
 // como PDF" como destino de impresión.
-const printFullOrderToKitchen = async (order, restaurant) => {
-  if (isEposReady(restaurant, 'bebidas')) {
-    try {
-      await printToEposStation(order, 'full', getStationConfig(restaurant, 'bebidas'), { isDrinkItem });
-      showSuccess('Comanda completa enviada a la impresora de bebidas.');
-      return;
-    } catch (err) {
-      showError(`No se pudo imprimir en la impresora de bebidas: ${err.message}`);
-      // Igual que en printToStation: si la impresora de red falla, seguimos
-      // con el respaldo para no perder la comanda.
+const printFullOrderToKitchen = async (order, restaurant) =>
+  withPrintLock(`${order?._id}-full`, async () => {
+    if (isEposReady(restaurant, 'bebidas')) {
+      try {
+        await printToEposStation(order, 'full', getStationConfig(restaurant, 'bebidas'), { isDrinkItem });
+        showSuccess('Comanda completa enviada a la impresora de bebidas.');
+        return;
+      } catch (err) {
+        showError(`No se pudo imprimir en la impresora de bebidas: ${err.message}`);
+        // Igual que en printToStation: si la impresora de red falla, seguimos
+        // con el respaldo para no perder la comanda.
+      }
     }
-  }
-  printOrder(order, 'full');
-};
+    printOrder(order, 'full');
+  });
 
 // Genera un PDF de la comanda completa reutilizando exactamente el mismo
 // dibujo (buildTicketCanvas) que ya usan el ticket térmico y la vista de

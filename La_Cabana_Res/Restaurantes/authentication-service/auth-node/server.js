@@ -60,10 +60,106 @@ mongoose.connect(mongoUri)
     .then(async () => {
         console.log("MongoDB conectado");
         await seedInternalProfiles();
+        await migrateBebidasFriasCategories();
         await seedBaseMenuItems();
         await seedDefaultRestaurantAndTables();
     })
     .catch(err => console.error(err));
+
+// Separa la categoría única "Bebidas frias" en tres categorías:
+//   - "Bebidas - Sodas"
+//   - "Bebidas Naturales"
+//   - "Bebidas - Licuados"
+//
+// IMPORTANTE: en Orders.jsx, `isDrinkItem` decide si un platillo va a la
+// impresora/vista de "bebidas" solo si su categoría contiene la palabra
+// "bebidas" (category.includes('bebidas')). Por eso las categorías nuevas
+// incluyen esa palabra — si les cambias el nombre, esos productos dejarían
+// de imprimirse en la impresora de bebidas y se irían por error a cocina.
+//
+// A diferencia de seedBaseMenuItems (que busca por name+category y por eso
+// crearía duplicados si solo le cambiáramos la categoría ahí), esta función
+// busca SOLO por nombre y actualiza la categoría del producto que ya existe,
+// sin tocar nombre, precio ni descripción. Correr esto varias veces es
+// seguro: una vez migrado un producto, ya no vuelve a moverse.
+const BEBIDAS_FRIAS_CATEGORY_MAP = {
+    // --- Sodas --- (cubre "Coca" del seed automático y "Cocacola" por si
+    // quedó de una corrección de precios anterior con ese nombre)
+    "Coca": "Bebidas - Sodas",
+    "Cocacola": "Bebidas - Sodas",
+    "Sprite": "Bebidas - Sodas",
+    "Orange": "Bebidas - Sodas",
+    "Salvavidas (Soda)": "Bebidas - Sodas",
+    "Mineral (Soda)": "Bebidas - Sodas",
+    "Fanta": "Bebidas - Sodas",
+    "Tiki": "Bebidas - Sodas",
+
+    // --- Bebidas naturales ---
+    "Limonada": "Bebidas Naturales",
+    "Naranjada": "Bebidas Naturales",
+    "LimoSoda": "Bebidas Naturales",
+    "Naranjada Con Soda": "Bebidas Naturales",
+    "Jamaica": "Bebidas Naturales",
+    "Cimarrona": "Bebidas Naturales",
+
+    // --- Licuados ---
+    "Licuado de Fresa": "Bebidas - Licuados",
+    "Licuado de Banano": "Bebidas - Licuados",
+    "Licuado mixto": "Bebidas - Licuados",
+    "Shakalaka": "Bebidas - Licuados",
+};
+
+// "Licuado de frutas" ya no existe como tal: se renombra a "Licuado mixto".
+// Este renombre corre ANTES del mapa de categorías de arriba, para que
+// "Licuado mixto" ya exista con ese nombre cuando el mapa busque por él.
+const BEBIDAS_FRIAS_RENAMES = {
+    "Licuado de frutas": "Licuado mixto",
+};
+
+// Nota: "Típico", "Tamarindo" y "Licuado mixto" ya no se crean aquí — están
+// agregados directamente en la lista de `seedBaseMenuItems` (más abajo), que
+// corre justo después de esta migración y los da de alta solos si faltan.
+// Si "Tiki" ya es tu "Típico" en la vida real, borra la línea de "Típico" en
+// esa lista para no terminar con dos productos casi iguales.
+
+const migrateBebidasFriasCategories = async () => {
+    try {
+        let renamed = 0;
+        for (const [oldName, newName] of Object.entries(BEBIDAS_FRIAS_RENAMES)) {
+            const item = await MenuItem.findOne({ name: oldName, isDeleted: { $ne: true } });
+            if (!item) continue;
+
+            const collision = await MenuItem.findOne({ name: newName, isDeleted: { $ne: true } });
+            if (collision) {
+                // Ya existe un producto con el nombre nuevo (por ejemplo, si lo
+                // creaste a mano antes de este deploy): no renombramos, para no
+                // terminar con dos productos con el mismo nombre.
+                console.log(`[Migración bebidas] Ya existe "${newName}"; no se renombró "${oldName}".`);
+                continue;
+            }
+
+            item.name = newName;
+            await item.save();
+            renamed += 1;
+            console.log(`[Migración bebidas] Renombrado: "${oldName}" -> "${newName}"`);
+        }
+
+        let updated = 0;
+        for (const [name, category] of Object.entries(BEBIDAS_FRIAS_CATEGORY_MAP)) {
+            const item = await MenuItem.findOne({ name, isDeleted: { $ne: true } });
+            if (!item || item.category === category) continue;
+            await MenuItem.updateOne({ _id: item._id }, { $set: { category } });
+            updated += 1;
+            console.log(`[Migración bebidas] ${name}: "${item.category}" -> "${category}"`);
+        }
+
+        if (renamed > 0 || updated > 0) {
+            console.log(`[Migración bebidas] ${renamed} renombrado(s), ${updated} recategorizado(s).`);
+        }
+    } catch (error) {
+        console.error("[Migración bebidas] Error:", error.message);
+    }
+};
 
 const seedDefaultRestaurantAndTables = async () => {
     try {
@@ -161,23 +257,25 @@ const seedBaseMenuItems = async () => {
             { name: "Té (variedad)", category: "Bebidas calientes", description: "Té de variedad.", price: 15, available: true },
             { name: "Chocolate", category: "Bebidas calientes", description: "Chocolate caliente.", price: 18, available: true },
             { name: "Café", category: "Bebidas calientes", description: "Café de la casa.", price: 15, available: true },
-            { name: "Limonada", category: "Bebidas frias", description: "Limonada fresca.", price: 15, available: true },
-            { name: "Naranjada", category: "Bebidas frias", description: "Naranjada.", price: 15, available: true },
-            { name: "Jamaica", category: "Bebidas frias", description: "Jamaica.", price: 15, available: true },
-            { name: "Licuado de frutas", category: "Bebidas frias", description: "Licuado de frutas.", price: 15, available: true },
-            { name: "Shakalaka", category: "Bebidas frias", description: "Shakalaka.", price: 10, available: true },
-            { name: "LimoSoda", category: "Bebidas frias", description: "LimoSoda.", price: 20, available: true },
-            { name: "Naranjada Con Soda", category: "Bebidas frias", description: "Naranjada con soda.", price: 20, available: true },
-            { name: "Licuado de Fresa", category: "Bebidas frias", description: "Licuado de fresa.", price: 15, available: true },
-            { name: "Cimarrona", category: "Bebidas frias", description: "Cimarrona.", price: 25, available: true },
-            { name: "Licuado de Banano", category: "Bebidas frias", description: "Licuado de banano.", price: 15, available: true },
-            { name: "Coca", category: "Bebidas frias", description: "Coca-Cola.", price: 10, available: true },
-            { name: "Sprite", category: "Bebidas frias", description: "Sprite.", price: 10, available: true },
-            { name: "Fanta", category: "Bebidas frias", description: "Fanta.", price: 10, available: true },
-            { name: "Orange", category: "Bebidas frias", description: "Orange.", price: 10, available: true },
-            { name: "Tiki", category: "Bebidas frias", description: "Tiki.", price: 10, available: true },
-            { name: "Salvavidas (Soda)", category: "Bebidas frias", description: "Salvavidas (soda).", price: 10, available: true },
-            { name: "Mineral (Soda)", category: "Bebidas frias", description: "Mineral (soda).", price: 10, available: true },
+            { name: "Limonada", category: "Bebidas Naturales", description: "Limonada fresca.", price: 15, available: true },
+            { name: "Naranjada", category: "Bebidas Naturales", description: "Naranjada.", price: 15, available: true },
+            { name: "Jamaica", category: "Bebidas Naturales", description: "Jamaica.", price: 15, available: true },
+            { name: "Shakalaka", category: "Bebidas - Licuados", description: "Shakalaka.", price: 10, available: true },
+            { name: "LimoSoda", category: "Bebidas Naturales", description: "LimoSoda.", price: 20, available: true },
+            { name: "Naranjada Con Soda", category: "Bebidas Naturales", description: "Naranjada con soda.", price: 20, available: true },
+            { name: "Licuado de Fresa", category: "Bebidas - Licuados", description: "Licuado de fresa.", price: 15, available: true },
+            { name: "Cimarrona", category: "Bebidas Naturales", description: "Cimarrona.", price: 25, available: true },
+            { name: "Licuado de Banano", category: "Bebidas - Licuados", description: "Licuado de banano.", price: 15, available: true },
+            { name: "Licuado mixto", category: "Bebidas - Licuados", description: "Licuado mixto.", price: 15, available: true },
+            { name: "Coca", category: "Bebidas - Sodas", description: "Coca-Cola.", price: 10, available: true },
+            { name: "Sprite", category: "Bebidas - Sodas", description: "Sprite.", price: 10, available: true },
+            { name: "Fanta", category: "Bebidas - Sodas", description: "Fanta.", price: 10, available: true },
+            { name: "Orange", category: "Bebidas - Sodas", description: "Orange.", price: 10, available: true },
+            { name: "Tiki", category: "Bebidas - Sodas", description: "Tiki.", price: 10, available: true },
+            { name: "Típico", category: "Bebidas - Sodas", description: "Típico.", price: 10, available: true },
+            { name: "Tamarindo", category: "Bebidas Naturales", description: "Tamarindo.", price: 15, available: true },
+            { name: "Salvavidas (Soda)", category: "Bebidas - Sodas", description: "Salvavidas (soda).", price: 10, available: true },
+            { name: "Mineral (Soda)", category: "Bebidas - Sodas", description: "Mineral (soda).", price: 10, available: true },
             { name: "Yogurt con frutas", category: "Postres", description: "Yogurt con frutas.", price: 15, available: true },
             { name: "Copa de helado", category: "Postres", description: "Copa de helado.", price: 15, available: true },
             { name: "Crepas", category: "Postres", description: "Crepas.", price: 35, available: true },
