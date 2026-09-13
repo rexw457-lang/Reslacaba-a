@@ -92,31 +92,31 @@ const ensureIncludedFreeItemsForOrder = ({ items, existingDeliveredIncludedItems
 
     const includedItems = [...preserved];
 
-    const mainCourseMap = new Map();
+    // En vez de un ítem "Tortillas para: <platillo>" por cada plato fuerte
+    // distinto, se suman todas las tortillas de la orden en un solo ítem
+    // "Tortillas" con la cantidad total. Sigue teniendo precio 0 (cortesía);
+    // las tortillas extra (con precio) son un ítem aparte y no se tocan aquí.
+    let totalTortillas = 0;
     items.forEach((it) => {
         const menuItem = it.menuItemDoc || it.menuItem;
         if (!isMainCourseItem(menuItem)) return;
         const label = String(menuItem.name || it.label || '').trim();
         if (!label) return;
         const tortillasPerUnit = getTortillasPerMainCourse(label);
-        const existing = mainCourseMap.get(label) || { quantity: 0, label };
-        existing.quantity += Number(it.quantity || 1) * tortillasPerUnit;
-        mainCourseMap.set(label, existing);
+        totalTortillas += Number(it.quantity || 1) * tortillasPerUnit;
     });
 
-    for (const { quantity, label } of mainCourseMap.values()) {
-        const includedLabel = `Tortillas para: ${label}`;
-        if (!preservedLabels.has(includedLabel)) {
-            includedItems.push({
-                label: includedLabel,
-                quantity: quantity || 1,
-                price: 0,
-                observations: "",
-                delivered: false,
-                isIncluded: true,
-                hideInBebidas: false,
-            });
-        }
+    const TORTILLAS_INCLUDED_LABEL = "Tortillas";
+    if (totalTortillas > 0 && !preservedLabels.has(TORTILLAS_INCLUDED_LABEL)) {
+        includedItems.push({
+            label: TORTILLAS_INCLUDED_LABEL,
+            quantity: totalTortillas,
+            price: 0,
+            observations: "",
+            delivered: false,
+            isIncluded: true,
+            hideInBebidas: false,
+        });
     }
 
     return includedItems;
