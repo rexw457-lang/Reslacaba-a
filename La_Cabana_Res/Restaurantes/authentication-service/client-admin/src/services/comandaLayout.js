@@ -236,7 +236,19 @@ const isExtraChargeItem = (item) => {
 };
 
 export const getVisibleItems = (order, scope, isDrinkItem) => {
-  const baseVisibleItems = (order.items || []).filter((item) => !item.isIncluded);
+  // OJO: antes esta línea excluía TODO item con isIncluded=true (p. ej. el
+  // ítem "Tortillas" de cortesía que arma el backend en
+  // ensureIncludedFreeItemsForOrder) sin importar el scope. Eso hacía que
+  // las tortillas gratis totales de cada platillo NUNCA se imprimieran en
+  // ninguna comanda (ni cocina ni bebidas), aunque isDrinkItem() las
+  // marcara correctamente como visibles en bebidas (hideInBebidas=false).
+  // El resto de la pantalla (lista de pedidos, edición, etc. en Orders.jsx)
+  // sí respeta esa distinción con `!(item.isIncluded && item.hideInBebidas)`
+  // en vez de excluir isIncluded a secas; aquí se alinea el mismo criterio:
+  // isIncluded ya NO se excluye por sí solo, solo cuando además está
+  // marcado hideInBebidas (p. ej. las tostadas de cortesía del ceviche, que
+  // sí deben esconderse de bebidas porque van con el platillo).
+  const baseVisibleItems = (order.items || []).filter((item) => !(item.isIncluded && item.hideInBebidas));
   if (scope === 'kitchen') return baseVisibleItems.filter((item) => !isDrinkItem(item) && !item.delivered && !isExtraChargeItem(item));
   if (scope === 'bebidas') return baseVisibleItems.filter((item) => isDrinkItem(item) && !item.delivered);
   return baseVisibleItems;
