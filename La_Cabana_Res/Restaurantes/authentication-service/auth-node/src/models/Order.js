@@ -56,6 +56,11 @@ const orderSchema = new mongoose.Schema(
             type: String,
             default: "",
         },
+        waiter: {
+            type: String,
+            default: "",
+            trim: true,
+        },
         isToGo: {
             type: Boolean,
             default: false,

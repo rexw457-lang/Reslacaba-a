@@ -106,8 +106,8 @@ export const updateOrderSectionStatus = async (id, section, status) => {
   return data;
 };
 
-export const updateOrderItems = async (id, items) => {
-  const { data } = await axiosAdmin.patch(`/orders/${id}/items`, { items });
+export const updateOrderItems = async (id, items, waiter) => {
+  const { data } = await axiosAdmin.patch(`/orders/${id}/items`, { items, waiter });
   return data;
 };
 

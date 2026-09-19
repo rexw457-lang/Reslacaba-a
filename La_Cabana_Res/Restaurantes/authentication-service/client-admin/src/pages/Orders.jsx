@@ -47,6 +47,17 @@ import licuadosImg from '../assets/img/licuados.jpg';
 import sodasImg from '../assets/img/sodas.jpg';
 import bebidasNaturalesImg from '../assets/img/bebidas-naturales.jpg';
 
+// Lista fija de meseros disponibles para asignar a un pedido; el nombre
+// elegido se guarda en order.waiter y aparece impreso en la comanda
+// (ver "Mesero:" en comandaLayout.js) y en el reporte de Excel.
+const WAITERS = [
+  'Doña Juanona',
+  'Tonelón',
+  'Don Filiberto',
+  'La Patita Bellaka',
+  'Doña Rosa Pérez',
+];
+
 const formatDate = (value) => new Date(value).toLocaleString('es-GT', { dateStyle: 'medium', timeStyle: 'short' });
 const formatDayLabel = (value) =>
   new Date(value).toLocaleDateString('es-GT', {
@@ -506,6 +517,7 @@ export const Orders = () => {
   const [orders, setOrders] = useState([]);
   const [tables, setTables] = useState([]);
   const [selectedTableId, setSelectedTableId] = useState('');
+  const [waiter, setWaiter] = useState('');
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('Todos');
@@ -700,6 +712,28 @@ export const Orders = () => {
       return [...current, { id: menuItem._id, menuItem: menuItem._id, name: 'Extra', price: EXTRA_CHARGE_PRICE, quantity: 1, observations: '' }];
     });
     showSuccess('Extra agregado a la cuenta (Q5.00)');
+  };
+
+  // "Agua pura": acceso rápido para agregar una Agua pura (Q10) al pedido
+  // nuevo sin tener que buscarla en la categoría "Bebidas Naturales".
+  // Igual que con "Extra", el precio se fuerza a Q10 sin importar lo que
+  // tenga guardado el platillo en el menú, y requiere que exista en el
+  // catálogo un platillo llamado "Agua pura" (en cualquier categoría).
+  const AGUA_PURA_PRICE = 10;
+  const addAguaPura = () => {
+    const menuItem = menuItems.find((item) => String(item.name || '').trim().toLowerCase() === 'agua pura');
+    if (!menuItem) {
+      showError('No se encontró "Agua pura" en el menú. Créalo en Menús (nombre exacto "Agua pura", en cualquier categoría) para usar este botón.');
+      return;
+    }
+    setCart((current) => {
+      const existing = current.find((entry) => entry.id === menuItem._id);
+      if (existing) {
+        return current.map((entry) => (entry.id === menuItem._id ? { ...entry, quantity: entry.quantity + 1 } : entry));
+      }
+      return [...current, { id: menuItem._id, menuItem: menuItem._id, name: 'Agua pura', price: AGUA_PURA_PRICE, quantity: 1, observations: '' }];
+    });
+    showSuccess('Agua pura agregada a la cuenta (Q10.00)');
   };
 
   const updateCartNotes = (id, observations) => {
@@ -958,16 +992,19 @@ export const Orders = () => {
   const [editingItems, setEditingItems] = useState([]);
   const [editingLoading, setEditingLoading] = useState(false);
   const [selectedMenuItemId, setSelectedMenuItemId] = useState('');
+  const [editingWaiter, setEditingWaiter] = useState('');
 
   const openEditor = (order) => {
     setEditingOrderId(order._id);
     setSelectedMenuItemId('');
     setEditingItems([]);
+    setEditingWaiter(order.waiter || '');
   };
 
   const closeEditor = () => {
     setEditingOrderId(null);
     setEditingItems([]);
+    setEditingWaiter('');
   };
 
   const changeEditingQuantity = (index, delta) => {
@@ -1021,6 +1058,24 @@ export const Orders = () => {
     showSuccess('Extra agregado a la cuenta (Q5.00)');
   };
 
+  // Misma "Agua pura" que en Agregar pedido, pero aplicada al pedido que se
+  // está editando (editingItems) en vez del carrito nuevo.
+  const addAguaPuraToEditing = () => {
+    const menuItem = menuItems.find((item) => String(item.name || '').trim().toLowerCase() === 'agua pura');
+    if (!menuItem) {
+      showError('No se encontró "Agua pura" en el menú. Créalo en Menús (nombre exacto "Agua pura", en cualquier categoría) para usar este botón.');
+      return;
+    }
+    setEditingItems((current) => {
+      const existingIndex = current.findIndex((it) => String(it.menuItem) === String(menuItem._id));
+      if (existingIndex >= 0) {
+        return current.map((it, i) => (i === existingIndex ? { ...it, quantity: it.quantity + 1 } : it));
+      }
+      return [...current, { menuItem: menuItem._id, name: 'Agua pura', price: AGUA_PURA_PRICE, quantity: 1, observations: '' }];
+    });
+    showSuccess('Agua pura agregada a la cuenta (Q10.00)');
+  };
+
   const submitEditedOrder = async () => {
     if (!editingOrderId) return;
     if (!editingItems.length) {
@@ -1063,7 +1118,7 @@ export const Orders = () => {
       if (!payloadItems.length) {
         throw new Error('El pedido debe tener al menos un platillo.');
       }
-      const updated = await updateOrderItems(editingOrderId, payloadItems);
+      const updated = await updateOrderItems(editingOrderId, payloadItems, editingWaiter);
       setOrders((current) => current.map((o) => (o._id === updated._id ? updated : o)));
       if (editingItems.length) {
         // BUG previo: `editingItems` guarda el platillo agregado en el
@@ -1113,12 +1168,14 @@ export const Orders = () => {
         items: cart.map((entry) => ({ menuItem: entry.menuItem, quantity: entry.quantity, observations: entry.observations, price: entry.price })),
         observations: orderObservations,
         isToGo: isToGoOrder,
+        waiter,
       };
 
       const created = await createOrder(payload);
       setCart([]);
       setOrderObservations('');
       setIsToGoOrder(false);
+      setWaiter('');
       setOrders((current) => [created, ...current]);
       showSuccess(`Pedido ${created.orderNumber || created._id?.slice(-6)} registrado`);
       // Pedido confirmado: se imprime automáticamente en las impresoras de cocina y bebidas.
@@ -1174,6 +1231,7 @@ export const Orders = () => {
                   ? `Mesa: ${order.table.number}`
                   : 'Sin mesa'
             }</p>
+            <p className='mt-1 text-sm font-semibold text-[#e6be7d]'>Mesero: {order.waiter || 'Sin asignar'}</p>
           </div>
         </div>
         <div className='flex flex-col gap-2'>
@@ -1210,6 +1268,23 @@ export const Orders = () => {
         {editingOrderId === order._id && (
           <div className='mt-4 rounded-2xl border border-dashed border-[#e6be7d]/20 bg-[#141426]/95 p-4'>
             <h4 className='mb-3 font-bold text-[#e0e0e0]'>Editar pedido</h4>
+
+            <div className='mb-3'>
+              <label className='block text-sm text-[#e6be7d] mb-2'>Mesero</label>
+              <select
+                value={editingWaiter}
+                onChange={(e) => setEditingWaiter(e.target.value)}
+                className='admin-input w-full px-3 py-2 text-sm'
+              >
+                <option value=''>Sin asignar</option>
+                {WAITERS.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {editingItems.map((it, idx) => (
               <div key={`${order._id}-edit-${idx}`} className='mb-3 flex items-center justify-between gap-3'>
                 <div>
@@ -1264,6 +1339,13 @@ export const Orders = () => {
                   className='admin-button-secondary px-3 py-2 text-xs'
                 >
                   + Extra (Q5)
+                </button>
+                <button
+                  type='button'
+                  onClick={addAguaPuraToEditing}
+                  className='admin-button-secondary px-3 py-2 text-xs'
+                >
+                  + Agua pura (Q10)
                 </button>
               </div>
             </div>
@@ -1494,6 +1576,22 @@ export const Orders = () => {
               </select>
             </label>
 
+            <label className='mt-4 block'>
+              <span className='mb-2 block text-sm font-bold text-[#e0e0e0]'>Mesero</span>
+              <select
+                value={waiter}
+                onChange={(event) => setWaiter(event.target.value)}
+                className='admin-input w-full px-3 py-3 text-sm'
+              >
+                <option value=''>Sin asignar</option>
+                {WAITERS.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
             <div className='mt-4'>
               <span className='mb-2 block text-sm font-bold text-[#e6be7d]'>Accesos rápidos</span>
               <div className='flex flex-wrap gap-2'>
@@ -1517,6 +1615,13 @@ export const Orders = () => {
                   className='admin-button-secondary px-3 py-2 text-xs'
                 >
                   + Extra (Q5)
+                </button>
+                <button
+                  type='button'
+                  onClick={addAguaPura}
+                  className='admin-button-secondary px-3 py-2 text-xs'
+                >
+                  + Agua pura (Q10)
                 </button>
               </div>
             </div>

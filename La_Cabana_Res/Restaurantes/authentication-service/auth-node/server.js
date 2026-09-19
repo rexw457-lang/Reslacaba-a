@@ -274,6 +274,7 @@ const seedBaseMenuItems = async () => {
             { name: "Tiki", category: "Bebidas - Sodas", description: "Tiki.", price: 10, available: true },
             { name: "Típico", category: "Bebidas - Sodas", description: "Típico.", price: 10, available: true },
             { name: "Tamarindo", category: "Bebidas Naturales", description: "Tamarindo.", price: 15, available: true },
+            { name: "Agua pura", category: "Bebidas Naturales", description: "Agua pura embotellada.", price: 10, available: true },
             { name: "Salvavidas (Soda)", category: "Bebidas - Sodas", description: "Salvavidas (soda).", price: 10, available: true },
             { name: "Mineral (Soda)", category: "Bebidas - Sodas", description: "Mineral (soda).", price: 10, available: true },
             { name: "Yogurt con frutas", category: "Postres", description: "Yogurt con frutas.", price: 15, available: true },
