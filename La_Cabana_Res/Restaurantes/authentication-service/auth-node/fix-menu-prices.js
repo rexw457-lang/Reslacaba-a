@@ -31,6 +31,7 @@ const baseItems = [
   { name: 'Caldo de Camarones', category: 'Platos Fuertes', price: 65, description: 'Caldo de camarones.' },
   { name: 'Pechuga Empanizada', category: 'Platos Fuertes', price: 45, description: 'Pechuga empanizada.' },
   { name: 'Pechuga a la Plancha', category: 'Platos Fuertes', price: 45, description: 'Pechuga a la plancha.' },
+  { name: 'Carne a la plancha', category: 'Platos Fuertes', price: 80, description: 'Carne a la plancha.' },
   { name: 'Ceviche Mixto', category: 'Platos Fuertes', price: 50, description: 'Ceviche mixto refrescante.' },
   { name: 'Ceviche de Camarón', category: 'Platos Fuertes', price: 60, description: 'Ceviche de camarón.' },
   { name: 'Mojarra Frita', category: 'Platos Fuertes', price: 110, description: 'Mojarra frita según tamaño solicitado.' },

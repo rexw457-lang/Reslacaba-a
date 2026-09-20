@@ -5,9 +5,9 @@ import Table from "../models/Table.js";
 const BEVERAGE_CATEGORY_KEYWORDS = ["bebidas", "postres"];
 const BEVERAGE_NAME_KEYWORDS = ["tortilla", "tortillas", "tostada", "tostadas"];
 // Cantidad de tortillas que trae cada plato fuerte. Por defecto son 5;
-// pechugas y alitas llevan solo 4. Si en el futuro se agrega otro platillo
+// pechugas, alitas y carne a la plancha llevan solo 4. Si en el futuro se agrega otro platillo
 // con una cantidad distinta, solo hay que sumarlo aquí.
-const FOUR_TORTILLAS_KEYWORDS = ["pechuga", "alita"]; // "alita" cubre "Alitas ..." también
+const FOUR_TORTILLAS_KEYWORDS = ["pechuga", "alita", "carne a la plancha"]; // "alita" cubre "Alitas ..." también
 const DEFAULT_TORTILLAS_PER_MAIN_COURSE = 5;
 const REDUCED_TORTILLAS_PER_MAIN_COURSE = 4;
 
@@ -67,7 +67,7 @@ const isMainCourseItem = (menuItem) => {
     return category.includes("platos fuertes") && !name.includes("ceviche");
 };
 
-// Pechugas y alitas llevan 4 tortillas; el resto de platos fuertes (caldos,
+// Pechugas, alitas y carne a la plancha llevan 4 tortillas; el resto de platos fuertes (caldos,
 // camarones, mojarras, costillas, mar y tierra, etc.) llevan 5.
 const getTortillasPerMainCourse = (name) => {
     const lowerName = String(name || "").toLowerCase();
