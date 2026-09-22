@@ -22,6 +22,7 @@ const baseItems = [
   { name: 'Porción de tortillas', category: 'Extras', price: 5, description: 'Porción de tortillas frescas.' },
   { name: 'Porción de tostadas', category: 'Extras', price: 8, description: 'Porción de tostadas.' },
   { name: 'Extra', category: 'Extras', price: 5, description: 'Cargo extra genérico.' },
+  { name: 'Caldito de Camarones', category: 'Platos Fuertes', price: 35, description: 'Caldito de camarones.' },
   { name: 'Camarones Empanizados', category: 'Platos Fuertes', price: 65, description: 'Camarones empanizados.' },
   { name: 'Camarones Encebollados', category: 'Platos Fuertes', price: 65, description: 'Camarones encebollados.' },
   { name: 'Camarones a la Diabla', category: 'Platos Fuertes', price: 65, description: 'Camarones a la diabla.' },

@@ -222,6 +222,7 @@ const seedBaseMenuItems = async () => {
             { name: "Porción encebollados", category: "Extras", description: "Porción de camarones encebollados.", price: 40, available: true },
             { name: "Porción de tortillas", category: "Extras", description: "Porción de tortillas frescas.", price: 5, available: true },
             { name: "Porción de tostadas", category: "Extras", description: "Porción de tostadas.", price: 8, available: true },
+            { name: "Caldito de Camarones", category: "Platos Fuertes", description: "Caldito de camarones.", price: 35, available: true },
             { name: "Camarones Ajillo", category: "Platos Fuertes", description: "Camarones al ajillo.", price: 65, available: true },
             { name: "Camarones Diabla", category: "Platos Fuertes", description: "Camarones a la diabla.", price: 65, available: true },
             { name: "Camarones Empanizados", category: "Platos Fuertes", description: "Camarones empanizados.", price: 65, available: true },

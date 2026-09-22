@@ -7,7 +7,7 @@ const BEVERAGE_NAME_KEYWORDS = ["tortilla", "tortillas", "tostada", "tostadas"];
 // Cantidad de tortillas que trae cada plato fuerte. Por defecto son 5;
 // pechugas, alitas y carne a la plancha llevan solo 4. Si en el futuro se agrega otro platillo
 // con una cantidad distinta, solo hay que sumarlo aquí.
-const FOUR_TORTILLAS_KEYWORDS = ["pechuga", "alita", "carne a la plancha"]; // "alita" cubre "Alitas ..." también
+const FOUR_TORTILLAS_KEYWORDS = ["pechuga", "alita", "carne a la plancha", "caldito de camarones"]; // "alita" cubre "Alitas ..." también
 const DEFAULT_TORTILLAS_PER_MAIN_COURSE = 5;
 const REDUCED_TORTILLAS_PER_MAIN_COURSE = 4;
 
