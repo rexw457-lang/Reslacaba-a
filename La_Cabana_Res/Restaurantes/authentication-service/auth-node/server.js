@@ -233,6 +233,7 @@ const seedBaseMenuItems = async () => {
             { name: "Pechuga Empanizada", category: "Platos Fuertes", description: "Pechuga empanizada.", price: 45, available: true },
             { name: "Pechuga a la Plancha", category: "Platos Fuertes", description: "Pechuga a la plancha.", price: 45, available: true },
             { name: "Carne a la plancha", category: "Platos Fuertes", description: "Carne a la plancha.", price: 80, available: true },
+            { name: "Camarón medio", category: "Platos Fuertes", description: "Media porción de camarones.", price: 40, available: true },
             { name: "Ceviche Mixto", category: "Platos Fuertes", description: "Ceviche mixto refrescante.", price: 50, available: true },
             { name: "Ceviche de Camarón", category: "Platos Fuertes", description: "Ceviche de camarón.", price: 60, available: true },
             { name: "Mojarra Frita", category: "Platos Fuertes", description: "Mojarra frita según tamaño solicitado.", price: 110, available: true },
