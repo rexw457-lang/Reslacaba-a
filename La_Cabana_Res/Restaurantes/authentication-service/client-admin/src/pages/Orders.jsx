@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { createOrder, getMenuItems, getOrders, getTables, updateOrderStatus, updateOrderItems, deleteOrder, getRestaurants, updateRestaurant } from '../services/adminApi.js';
+import { createOrder, getMenuItems, getOrders, getTables, updateOrderStatus, updateOrderItems, adjustOrderItem, deleteOrder, getRestaurants, updateRestaurant } from '../services/adminApi.js';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
 import { printToEposStation, buildTicketCanvas } from '../services/eposPrint.js';
@@ -27,6 +27,7 @@ import { Spinner } from '../features/auth/components/Spinner.jsx';
 import { useAuthStore } from '../features/auth/store/authStore.js';
 import { showError, showSuccess } from '../shared/utils/toast.js';
 import { askPrompt } from '../shared/utils/uiPrompt.js';
+import { useUIStore } from '../features/auth/store/uiStore.js';
 import {
   ClipboardDocumentListIcon,
   FunnelIcon,
@@ -987,6 +988,105 @@ export const Orders = () => {
     }
   };
 
+  // ---- Quitar / sumar / restar un platillo de una orden (independiente de "Editar") ----
+  // Cada renglón de la orden tiene sus propios botones: "−" resta una unidad,
+  // "+" suma una, y "Quitar platillo" lo elimina completo. El servidor
+  // recalcula total, tortillas incluidas y estados de cocina/bebidas.
+  const [itemBusyId, setItemBusyId] = useState(null);
+
+  const getItemDisplayName = (item) => item.menuItem?.name || item.label || 'Platillo';
+
+  const applyItemChange = async (order, item, payload, successMessage) => {
+    try {
+      setItemBusyId(item._id);
+      const updated = await adjustOrderItem(order._id, item._id, payload);
+      setOrders((current) => current.map((o) => (o._id === updated._id ? updated : o)));
+      showSuccess(successMessage);
+      return updated;
+    } catch (error) {
+      console.error(error);
+      showError(error?.response?.data?.error || 'No se pudo modificar el platillo');
+      return null;
+    } finally {
+      setItemBusyId(null);
+    }
+  };
+
+  const handleIncrementItem = async (order, item) => {
+    const updated = await applyItemChange(order, item, { delta: 1 }, `+1 ${getItemDisplayName(item)}`);
+    if (!updated) return;
+    // Igual que al agregar desde "Editar": la unidad nueva se manda a comanda.
+    const updatedItem = (updated.items || []).find((it) => it._id === item._id);
+    if (updatedItem) {
+      try {
+        printPartialOrder(updated, [{ ...updatedItem, quantity: 1 }], restaurant);
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  };
+
+  const handleRemoveItem = (order, item) => {
+    const explicitCount = (order.items || []).filter((it) => !it.isIncluded).length;
+    if (explicitCount <= 1) {
+      showError('No se puede quitar el último platillo. Usa "Cancelar pedido" para eliminar todo el pedido.');
+      return;
+    }
+    const name = getItemDisplayName(item);
+    useUIStore.getState().openConfirm(
+      'Quitar platillo',
+      `¿Quitar ${item.quantity}× ${name} de este pedido?`,
+      () => applyItemChange(order, item, { remove: true }, `${name} quitado del pedido`),
+    );
+  };
+
+  const handleDecrementItem = (order, item) => {
+    // Con 1 sola unidad, restar equivale a quitar el platillo: se pide confirmación.
+    if (Number(item.quantity) <= 1) {
+      handleRemoveItem(order, item);
+      return;
+    }
+    applyItemChange(order, item, { delta: -1 }, `-1 ${getItemDisplayName(item)}`);
+  };
+
+  const renderItemControls = (order, item) => {
+    if (!canEditOrderItems || item.isIncluded || !item._id) return null;
+    const busy = itemBusyId === item._id;
+    return (
+      <div className='mt-3 flex flex-wrap items-center justify-end gap-2'>
+        <button
+          type='button'
+          disabled={busy}
+          onClick={() => handleDecrementItem(order, item)}
+          className='admin-button-secondary px-2 py-1'
+          aria-label='Quitar una unidad'
+          title='Quitar una unidad'
+        >
+          <MinusIcon className='h-4 w-4' />
+        </button>
+        <span className='min-w-[2rem] text-center font-black text-[#e0e0e0]'>{item.quantity}</span>
+        <button
+          type='button'
+          disabled={busy}
+          onClick={() => handleIncrementItem(order, item)}
+          className='admin-button-secondary px-2 py-1'
+          aria-label='Agregar una unidad'
+          title='Agregar una unidad'
+        >
+          <PlusIcon className='h-4 w-4' />
+        </button>
+        <button
+          type='button'
+          disabled={busy}
+          onClick={() => handleRemoveItem(order, item)}
+          className='admin-button-danger px-3 py-1 text-xs'
+        >
+          Quitar platillo
+        </button>
+      </div>
+    );
+  };
+
   // Edit order items
   const [editingOrderId, setEditingOrderId] = useState(null);
   const [editingItems, setEditingItems] = useState([]);
@@ -1247,7 +1347,7 @@ export const Orders = () => {
       </div>
       <div className='mt-4 space-y-2'>
         {order.items?.filter((item) => !(item.isIncluded && item.hideInBebidas)).map((item) => (
-          <div key={`${order._id}-${item.menuItem?._id || item.label || item.menuItem}`} className='rounded-2xl border border-[#e6be7d]/10 bg-[#e6be7d]/20 p-3'>
+          <div key={`${order._id}-${item._id || item.menuItem?._id || item.label || item.menuItem}`} className='rounded-2xl border border-[#e6be7d]/10 bg-[#e6be7d]/20 p-3'>
             <div className='flex items-center justify-between gap-4'>
                 <div className='flex items-center gap-2'>
                   <span className='font-extrabold text-[#e0e0e0]'>{item.quantity}× {item.menuItem?.name || item.label || 'Platillo'}</span>
@@ -1258,6 +1358,7 @@ export const Orders = () => {
                 <span className='text-sm font-bold text-[#e0e0e0]'>{formatCurrency(Number(item.price || 0) * Number(item.quantity || 0))}</span>
               </div>
             {item.observations && <p className='mt-2 text-xs text-[#e0e0e0]'>Obs.: {item.observations}</p>}
+            {renderItemControls(order, item)}
           </div>
         ))}
         {order.observations && <p className='rounded-2xl bg-[#e6be7d]/14 px-3 py-2 text-sm text-[#e0e0e0]'>Observaciones: {order.observations}</p>}
@@ -1719,7 +1820,7 @@ export const Orders = () => {
                   if (view === 'kitchen') return !isDrinkItem(item) && !item.delivered;
                   return true;
                 }).map((item) => (
-                  <div key={`${order._id}-${item.menuItem?._id || item.label || item.menuItem}`} className='rounded-2xl border border-[#e6be7d]/10 bg-[#e6be7d]/20 p-3'>
+                  <div key={`${order._id}-${item._id || item.menuItem?._id || item.label || item.menuItem}`} className='rounded-2xl border border-[#e6be7d]/10 bg-[#e6be7d]/20 p-3'>
                     <div className='flex items-center justify-between gap-4'>
                         <div className='flex items-center gap-2'>
                           <span className='font-extrabold text-[#e0e0e0]'>{item.quantity}× {item.menuItem?.name || item.label || 'Platillo'}</span>
@@ -1730,6 +1831,7 @@ export const Orders = () => {
                         <span className='text-sm font-bold text-[#e0e0e0]'>{formatCurrency(Number(item.price || 0) * Number(item.quantity || 0))}</span>
                       </div>
                     {item.observations && <p className='mt-2 text-xs text-[#e0e0e0]'>Obs.: {item.observations}</p>}
+                    {renderItemControls(order, item)}
                   </div>
                 ))}
                 {order.observations && <p className='rounded-2xl bg-[#e6be7d]/14 px-3 py-2 text-sm text-[#e0e0e0]'>Observaciones: {order.observations}</p>}

@@ -111,6 +111,11 @@ export const updateOrderItems = async (id, items, waiter) => {
   return data;
 };
 
+export const adjustOrderItem = async (orderId, itemId, payload) => {
+  const { data } = await axiosAdmin.patch(`/orders/${orderId}/items/${itemId}`, payload);
+  return data;
+};
+
 export const deleteOrder = async (id) => {
   const { data } = await axiosAdmin.delete(`/orders/${id}`);
   return data;

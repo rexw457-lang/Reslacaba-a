@@ -484,3 +484,91 @@ export const updateOrderItems = async (req, res) => {
         res.status(400).json({ error: error.message });
     }
 };
+
+// Etiqueta del ítem incluido (cortesía) que suma todas las tortillas de la orden.
+// Debe coincidir con TORTILLAS_INCLUDED_LABEL de ensureIncludedFreeItemsForOrder.
+const INCLUDED_TORTILLAS_LABEL = "Tortillas";
+
+/**
+ * Ajusta UN renglón de la orden sin tocar los demás:
+ *   - { remove: true }  -> quita el platillo completo (todas sus unidades).
+ *   - { delta: 1 }      -> suma una unidad (delta positivo).
+ *   - { delta: -1 }     -> resta una unidad; si llega a 0, quita el renglón.
+ * Después recalcula el total, las tortillas incluidas y los estados de
+ * bebidas/cocina, igual que lo hace updateOrderItems.
+ */
+export const adjustOrderItem = async (req, res) => {
+    try {
+        const { id, itemId } = req.params;
+        const { delta, remove } = req.body || {};
+
+        const order = await Order.findById(id).populate("items.menuItem");
+        if (!order) {
+            return res.status(404).json({ error: "Pedido no encontrado." });
+        }
+
+        const item = order.items.id(itemId);
+        if (!item) {
+            return res.status(404).json({ error: "Ese platillo ya no está en el pedido." });
+        }
+
+        if (item.isIncluded) {
+            return res.status(400).json({ error: "Las tortillas incluidas se calculan solas según los platos fuertes del pedido." });
+        }
+
+        let removeLine = remove === true;
+        if (!removeLine) {
+            const step = Number(delta);
+            if (!Number.isInteger(step) || step === 0) {
+                return res.status(400).json({ error: "Indica { remove: true } o un delta entero distinto de cero." });
+            }
+            const newQuantity = Number(item.quantity) + step;
+            if (newQuantity < 1) {
+                removeLine = true;
+            } else {
+                item.quantity = newQuantity;
+                // Las unidades nuevas todavía no se han entregado.
+                if (step > 0) item.delivered = false;
+            }
+        }
+
+        if (removeLine) {
+            const explicitCount = order.items.filter((it) => !it.isIncluded).length;
+            if (explicitCount <= 1) {
+                return res.status(400).json({ error: "No se puede quitar el último platillo del pedido. Usa \"Cancelar pedido\" para eliminarlo completo." });
+            }
+            order.items.pull(itemId);
+        }
+
+        // Re-sincroniza las tortillas incluidas con los platos fuertes que quedaron.
+        let totalTortillas = 0;
+        order.items.forEach((it) => {
+            if (it.isIncluded || !isMainCourseItem(it.menuItem)) return;
+            const name = String(it.menuItem.name || it.label || "").trim();
+            if (!name) return;
+            totalTortillas += Number(it.quantity || 1) * getTortillasPerMainCourse(name);
+        });
+        const tortillasItem = order.items.find((it) => it.isIncluded && it.label === INCLUDED_TORTILLAS_LABEL);
+        if (tortillasItem) {
+            if (totalTortillas === 0) {
+                order.items.pull(tortillasItem._id);
+            } else if (!tortillasItem.delivered) {
+                tortillasItem.quantity = totalTortillas;
+            }
+        }
+
+        order.total = order.items.reduce((sum, it) => sum + Number(it.price || 0) * Number(it.quantity || 0), 0);
+
+        const hasDrinkPending = order.items.some((it) => isDrinkOrderItem(it) && !it.delivered);
+        const hasKitchenPending = order.items.some((it) => !isDrinkOrderItem(it) && !it.delivered);
+        order.drinkStatus = hasDrinkPending ? "Pendiente" : "Entregado";
+        order.kitchenStatus = hasKitchenPending ? "Pendiente" : "Entregado";
+
+        await order.save();
+
+        const updated = await populateOrder(Order.findById(id)).exec();
+        res.json(normalizeOrderResponse(updated));
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+};
