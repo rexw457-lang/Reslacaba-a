@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { createOrder, getMenuItems, getOrders, getTables, updateOrderStatus, updateOrderItems, adjustOrderItem, deleteOrder, deleteOrdersByDay, getRestaurants, updateRestaurant } from '../services/adminApi.js';
+import { createOrder, getMenuItems, getOrders, getTables, updateOrderStatus, updateOrderItems, adjustOrderItem, deleteOrder, deleteOrdersByDay, deleteAllOrders, getRestaurants, updateRestaurant } from '../services/adminApi.js';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
 import { printToEposStation, buildTicketCanvas } from '../services/eposPrint.js';
@@ -1024,6 +1024,43 @@ export const Orders = () => {
     );
   };
 
+  // Borrar TODO el historial (todos los días). Doble seguridad: primero el
+  // cuadro de confirmación y luego hay que escribir BORRAR.
+  const handleDeleteAll = () => {
+    const count = orders.length;
+    if (count === 0) {
+      showError('No hay pedidos para borrar');
+      return;
+    }
+    const grandTotal = orders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+
+    useUIStore.getState().openConfirm(
+      'Borrar TODO el historial',
+      `¿Estás seguro que deseas borrar TODO el historial? Se eliminarán ${count} ${count === 1 ? 'pedido' : 'pedidos'} de TODOS los días, por un total de ${formatCurrency(grandTotal)}. Esta acción no se puede deshacer (te recomendamos descargar el reporte de Excel antes).`,
+      async () => {
+        const typed = await askPrompt({
+          title: 'Confirmación final',
+          message: 'Para borrar todo el historial escribe BORRAR en mayúsculas.',
+          confirmLabel: 'Borrar todo',
+        });
+        if (typed === null) return;
+        if (String(typed).trim() !== 'BORRAR') {
+          showError('No se borró nada: la palabra de confirmación no coincide');
+          return;
+        }
+        try {
+          await deleteAllOrders();
+          const fresh = await getOrders();
+          setOrders(Array.isArray(fresh) ? fresh : []);
+          showSuccess('Todo el historial fue borrado correctamente');
+        } catch (error) {
+          console.error(error);
+          showError(error?.response?.data?.error || 'No se pudo borrar el historial');
+        }
+      },
+    );
+  };
+
   // ---- Quitar / sumar / restar un platillo de una orden (independiente de "Editar") ----
   // Cada renglón de la orden tiene sus propios botones: "−" resta una unidad,
   // "+" suma una, y "Quitar platillo" lo elimina completo. El servidor
@@ -1967,10 +2004,15 @@ export const Orders = () => {
       {view === 'history' && (
         <section className='admin-panel overflow-hidden'>
           <div className='border-b border-[#e6be7d]/10 p-5'>
-            <div className='mb-3 flex justify-end'>
+            <div className='mb-3 flex flex-wrap justify-end gap-3'>
               <button type='button' onClick={downloadDailyReport} className='admin-button-primary px-4 py-2 text-sm'>
                 Descargar reporte (Excel)
               </button>
+              {canDeleteHistory && (
+                <button type='button' onClick={handleDeleteAll} className='admin-button-danger px-4 py-2 text-sm'>
+                  Borrar todo el historial
+                </button>
+              )}
             </div>
             <div className='grid gap-3 md:grid-cols-[1fr_220px]'>
               <label className='relative block'>

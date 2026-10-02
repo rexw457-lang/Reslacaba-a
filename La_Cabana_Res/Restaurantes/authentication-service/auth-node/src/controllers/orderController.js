@@ -391,6 +391,31 @@ export const deleteOrdersByDay = async (req, res) => {
     }
 };
 
+// Borra TODO el historial de pedidos (todos los días). El cliente exige una
+// confirmación escrita; aquí además se pide el flag confirm=true para que una
+// llamada accidental a la ruta no pueda borrar todo.
+export const deleteAllOrders = async (req, res) => {
+    try {
+        if (String(req.query.confirm) !== 'true') {
+            return res.status(400).json({ error: 'Falta la confirmación para borrar todo el historial.' });
+        }
+
+        const tableIds = await Order.distinct('table', { table: { $ne: null } });
+        const result = await Order.deleteMany({});
+
+        if (tableIds.length > 0) {
+            await Table.updateMany({ _id: { $in: tableIds } }, { status: 'disponible' });
+        }
+
+        res.json({
+            message: 'Historial borrado correctamente.',
+            deletedCount: result.deletedCount,
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
 export const getOrderHistory = async (req, res) => {
     try {
         const { status } = req.query;

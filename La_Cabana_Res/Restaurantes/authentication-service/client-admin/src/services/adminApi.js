@@ -128,6 +128,11 @@ export const deleteOrdersByDay = async (start, end) => {
   return data;
 };
 
+export const deleteAllOrders = async () => {
+  const { data } = await axiosAdmin.delete('/orders/all', { params: { confirm: true } });
+  return data;
+};
+
 export const getOrderHistory = async (status = '') => {
   const { data } = await axiosAdmin.get('/orders/history', { params: status ? { status } : {} });
   return Array.isArray(data) ? data : [];

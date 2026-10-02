@@ -182,6 +182,8 @@ router.patch('/:id/items', verifyToken, verifyRole([ROLE_ADMIN, ROLE_RECEPCION, 
 router.patch('/:id/items/:itemId', verifyToken, verifyRole([ROLE_ADMIN, ROLE_RECEPCION, ROLE_COCINA]), controller.adjustOrderItem);
 // Borrar un día completo (ADMIN, RECEPCION y COCINA). Va ANTES de '/:id' para que "day" no se interprete como un id.
 router.delete('/day', verifyToken, verifyRole([ROLE_ADMIN, ROLE_COCINA, ROLE_RECEPCION]), controller.deleteOrdersByDay);
+// Borrar TODO el historial (ADMIN, RECEPCION y COCINA). También va antes de '/:id'.
+router.delete('/all', verifyToken, verifyRole([ROLE_ADMIN, ROLE_COCINA, ROLE_RECEPCION]), controller.deleteAllOrders);
 router.delete('/:id', verifyToken, verifyRole([ROLE_ADMIN, ROLE_RECEPCION, ROLE_COCINA]), controller.deleteOrder);
 
 export default router;
