@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { createOrder, getMenuItems, getOrders, getTables, updateOrderStatus, updateOrderItems, adjustOrderItem, deleteOrder, getRestaurants, updateRestaurant } from '../services/adminApi.js';
+import { createOrder, getMenuItems, getOrders, getTables, updateOrderStatus, updateOrderItems, adjustOrderItem, deleteOrder, deleteOrdersByDay, getRestaurants, updateRestaurant } from '../services/adminApi.js';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
 import { printToEposStation, buildTicketCanvas } from '../services/eposPrint.js';
@@ -988,6 +988,42 @@ export const Orders = () => {
     }
   };
 
+  // ---- Historial: borrar un pedido individual o un día completo (ADMIN, RECEPCION y COCINA) ----
+  const canDeleteHistory = canEditOrderItems;
+
+  const handleDeleteHistoryOrder = (order) => {
+    const label = order.orderNumber || `#${order._id.slice(-6)}`;
+    useUIStore.getState().openConfirm(
+      'Borrar pedido',
+      `¿Estás seguro que deseas borrar el pedido ${label} (${formatCurrency(order.total)})? Esta acción no se puede deshacer.`,
+      () => handleDeleteOrder(order._id),
+    );
+  };
+
+  const handleDeleteDay = (group) => {
+    // Rango del día en hora local: 00:00 hasta 00:00 del día siguiente.
+    const ref = new Date(group.orders[0].createdAt);
+    const start = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate());
+    const end = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() + 1);
+    const count = group.orders.length;
+
+    useUIStore.getState().openConfirm(
+      'Borrar día',
+      `¿Estás seguro que deseas borrar TODO el día ${group.day}? Se eliminarán ${count} ${count === 1 ? 'pedido' : 'pedidos'} por un total de ${formatCurrency(group.total)}. Esta acción no se puede deshacer (te recomendamos descargar el reporte de Excel antes).`,
+      async () => {
+        try {
+          await deleteOrdersByDay(start, end);
+          const fresh = await getOrders();
+          setOrders(Array.isArray(fresh) ? fresh : []);
+          showSuccess(`Día ${group.day} borrado correctamente`);
+        } catch (error) {
+          console.error(error);
+          showError(error?.response?.data?.error || 'No se pudo borrar el día');
+        }
+      },
+    );
+  };
+
   // ---- Quitar / sumar / restar un platillo de una orden (independiente de "Editar") ----
   // Cada renglón de la orden tiene sus propios botones: "−" resta una unidad,
   // "+" suma una, y "Quitar platillo" lo elimina completo. El servidor
@@ -1959,9 +1995,16 @@ export const Orders = () => {
                     <p className='text-sm uppercase tracking-[0.24em] text-[#e6be7d]'>Historial diario</p>
                     <h2 className='mt-2 text-2xl font-black text-[#e0e0e0]'>{group.day}</h2>
                   </div>
-                  <div className='rounded-3xl bg-[#0b1d41]/95 px-4 py-3 text-right'>
-                    <p className='text-xs uppercase tracking-[0.24em] text-[#a1c5ff]'>Total ganado</p>
-                    <p className='mt-1 text-xl font-black text-[#e0e0e0]'>{formatCurrency(group.total)}</p>
+                  <div className='flex flex-col items-stretch gap-3 md:items-end'>
+                    <div className='rounded-3xl bg-[#0b1d41]/95 px-4 py-3 text-right'>
+                      <p className='text-xs uppercase tracking-[0.24em] text-[#a1c5ff]'>Total ganado</p>
+                      <p className='mt-1 text-xl font-black text-[#e0e0e0]'>{formatCurrency(group.total)}</p>
+                    </div>
+                    {canDeleteHistory && (
+                      <button type='button' onClick={() => handleDeleteDay(group)} className='admin-button-danger w-fit self-end px-4 py-2 text-sm'>
+                        Borrar día
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className='space-y-4'>
@@ -1986,6 +2029,9 @@ export const Orders = () => {
                         <div className='mt-3 flex flex-wrap gap-2'>
                           <button type='button' onClick={() => printFullOrderToKitchen(order, restaurant)} className='admin-button-secondary px-3 py-2 text-sm'>Imprimir comanda completa</button>
                           <button type='button' onClick={() => downloadOrderPdf(order)} className='admin-button-secondary px-3 py-2 text-sm'>Guardar PDF</button>
+                          {canDeleteHistory && (
+                            <button type='button' onClick={() => handleDeleteHistoryOrder(order)} className='admin-button-danger px-3 py-2 text-sm'>Borrar pedido</button>
+                          )}
                         </div>
                       </div>
                       <p className='mt-4 text-sm text-[#e0e0e0]'>

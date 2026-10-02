@@ -342,6 +342,55 @@ export const deleteOrder = async (req, res) => {
     }
 };
 
+// Borra TODOS los pedidos de un día. El cliente manda el rango del día en
+// hora local (start = 00:00, end = 00:00 del día siguiente) para que "el día"
+// sea el de Guatemala y no el del servidor (UTC).
+export const deleteOrdersByDay = async (req, res) => {
+    try {
+        const start = new Date(req.query.start);
+        const end = new Date(req.query.end);
+
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+            return res.status(400).json({ error: 'Rango de fechas inválido.' });
+        }
+
+        // Seguro: nunca borrar más de ~1 día de golpe por un error de rango.
+        const MAX_RANGE_MS = 48 * 60 * 60 * 1000;
+        if (end - start > MAX_RANGE_MS) {
+            return res.status(400).json({ error: 'El rango no puede ser mayor a un día.' });
+        }
+
+        const filter = { createdAt: { $gte: start, $lt: end } };
+        const orders = await Order.find(filter).select('_id table').lean();
+
+        if (orders.length === 0) {
+            return res.json({ message: 'No había pedidos en ese día.', deletedCount: 0 });
+        }
+
+        const tableIds = [...new Set(orders.filter((o) => o.table).map((o) => String(o.table)))];
+
+        const result = await Order.deleteMany(filter);
+
+        // Liberar mesas, salvo las que todavía tengan un pedido activo de otro día.
+        for (const tableId of tableIds) {
+            const stillActive = await Order.exists({
+                table: tableId,
+                status: { $nin: ['Entregado', 'Cancelado'] },
+            });
+            if (!stillActive) {
+                await Table.findByIdAndUpdate(tableId, { status: 'disponible' });
+            }
+        }
+
+        res.json({
+            message: 'Día borrado correctamente.',
+            deletedCount: result.deletedCount,
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
 export const getOrderHistory = async (req, res) => {
     try {
         const { status } = req.query;

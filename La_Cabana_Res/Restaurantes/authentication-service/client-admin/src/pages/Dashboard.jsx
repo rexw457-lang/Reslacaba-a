@@ -46,13 +46,14 @@ export const Dashboard = () => {
 
   const analytics = useMemo(() => {
     const today = new Date();
-    const dailySales = orders
-      .filter((order) => isSameDay(order.createdAt, today))
-      .reduce((sum, order) => sum + Number(order.total || 0), 0);
-    const pendingOrders = orders.filter((order) => ['pendiente', 'preparando', 'preparación'].includes(normalizeStatus(order.status))).length;
-    const deliveredOrders = orders.filter((order) => ['entregado', 'entregada', 'completado', 'completada'].includes(normalizeStatus(order.status))).length;
+    // Todo el Dashboard muestra únicamente los pedidos de HOY (así, al borrar
+    // el día desde el historial, o al cambiar de día, todo vuelve a cero).
+    const todayOrders = orders.filter((order) => isSameDay(order.createdAt, today));
+    const dailySales = todayOrders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+    const pendingOrders = todayOrders.filter((order) => ['pendiente', 'preparando', 'preparación'].includes(normalizeStatus(order.status))).length;
+    const deliveredOrders = todayOrders.filter((order) => ['entregado', 'entregada', 'completado', 'completada'].includes(normalizeStatus(order.status))).length;
     const soldMap = new Map();
-    orders.forEach((order) => {
+    todayOrders.forEach((order) => {
       order.items?.forEach((item) => {
         // Excluir items incluidos (p. ej. tortillas gratis) del ranking interno
         if (item.isIncluded) return;
@@ -147,7 +148,7 @@ export const Dashboard = () => {
             <span className='admin-status admin-status-warning'>{menuItems.length} productos</span>
           </div>
           <div className='mt-6 space-y-4'>
-            {analytics.topProducts.length === 0 && <p className='rounded-2xl border border-dashed border-[#e6be7d]/20 p-6 text-center text-sm text-[#e6be7d]'>Aún no hay ventas registradas.</p>}
+            {analytics.topProducts.length === 0 && <p className='rounded-2xl border border-dashed border-[#e6be7d]/20 p-6 text-center text-sm text-[#e6be7d]'>Aún no hay ventas registradas hoy.</p>}
             {analytics.topProducts.map((item, index) => {
               const maxQuantity = Math.max(...analytics.topProducts.map((product) => product.quantity), 1);
               const width = Math.max(14, (item.quantity / maxQuantity) * 100);

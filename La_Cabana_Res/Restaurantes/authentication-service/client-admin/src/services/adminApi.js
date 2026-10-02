@@ -121,6 +121,13 @@ export const deleteOrder = async (id) => {
   return data;
 };
 
+export const deleteOrdersByDay = async (start, end) => {
+  const { data } = await axiosAdmin.delete('/orders/day', {
+    params: { start: start.toISOString(), end: end.toISOString() },
+  });
+  return data;
+};
+
 export const getOrderHistory = async (status = '') => {
   const { data } = await axiosAdmin.get('/orders/history', { params: status ? { status } : {} });
   return Array.isArray(data) ? data : [];

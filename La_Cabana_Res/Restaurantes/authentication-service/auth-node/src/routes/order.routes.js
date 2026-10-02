@@ -180,6 +180,8 @@ router.put('/:id/status', verifyToken, verifyRole([ROLE_ADMIN, ROLE_COCINA, ROLE
 router.patch('/:id/items', verifyToken, verifyRole([ROLE_ADMIN, ROLE_RECEPCION, ROLE_COCINA]), controller.updateOrderItems);
 // Quitar un platillo, o sumar/restar una unidad de un renglón (body: { remove: true } | { delta: 1 | -1 })
 router.patch('/:id/items/:itemId', verifyToken, verifyRole([ROLE_ADMIN, ROLE_RECEPCION, ROLE_COCINA]), controller.adjustOrderItem);
+// Borrar un día completo (ADMIN, RECEPCION y COCINA). Va ANTES de '/:id' para que "day" no se interprete como un id.
+router.delete('/day', verifyToken, verifyRole([ROLE_ADMIN, ROLE_COCINA, ROLE_RECEPCION]), controller.deleteOrdersByDay);
 router.delete('/:id', verifyToken, verifyRole([ROLE_ADMIN, ROLE_RECEPCION, ROLE_COCINA]), controller.deleteOrder);
 
 export default router;
