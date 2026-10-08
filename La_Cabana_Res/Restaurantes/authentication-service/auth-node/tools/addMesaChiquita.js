@@ -16,9 +16,18 @@ const run = async () => {
   const capacity = Number(process.argv[2]) || 2;
   await mongoose.connect(process.env.MONGO_URI);
 
+  // Para confirmar que es la MISMA base que usa el servidor en producción.
+  const host = mongoose.connection.host;
+  const dbName = mongoose.connection.name;
+  const totalTables = await Table.countDocuments();
+  const totalRestaurants = await Restaurant.countDocuments();
+  console.log(`Conectado a: ${host} / base: "${dbName}" (${totalRestaurants} restaurantes, ${totalTables} mesas)`);
+
   const restaurant = await Restaurant.findOne();
   if (!restaurant) {
-    console.error('No hay restaurantes registrados.');
+    console.error('Esta base de datos no tiene restaurantes: NO es la base que usa tu app.');
+    console.error('Revisa el MONGO_URI del .env (debe ser el mismo que usa el servidor en producción).');
+    await mongoose.disconnect();
     process.exit(1);
   }
 
