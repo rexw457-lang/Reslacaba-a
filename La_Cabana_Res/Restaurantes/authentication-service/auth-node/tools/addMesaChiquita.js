@@ -1,9 +1,14 @@
+import dns from 'node:dns';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import Table from '../src/models/Table.js';
 import Restaurant from '../src/models/Restaurant.js';
 
 dotenv.config();
+
+// Algunas redes/ISP en Windows bloquean la consulta DNS SRV de mongodb+srv://
+// (error querySrv ECONNREFUSED). Usar DNS públicos lo evita.
+dns.setServers(['8.8.8.8', '1.1.1.1']);
 
 // Uso: node tools/addMesaChiquita.js [capacidad]
 // Crea la mesa "Mesa chiquita" en el primer restaurante, con el siguiente
