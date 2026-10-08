@@ -117,7 +117,7 @@ export const Tables = () => {
       }
 
       setActiveTable(null);
-      setForm({ number: '', capacity: '' });
+      setForm({ name: '', number: '', capacity: '' });
       setFormErrors({});
       loadTables(selectedRestaurantId);
     } catch (error) {
@@ -128,7 +128,7 @@ export const Tables = () => {
 
   const handleEdit = (table) => {
     setActiveTable(table);
-    setForm({ number: table.number, capacity: table.capacity });
+    setForm({ name: table.name || '', number: table.number, capacity: table.capacity });
     setFormErrors({});
   };
 

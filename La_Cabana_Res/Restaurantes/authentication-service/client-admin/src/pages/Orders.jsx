@@ -510,6 +510,15 @@ const getOrderTableId = (order) => {
   return typeof table === 'object' ? table._id : table;
 };
 const getTableLabel = (table) => (table?.name?.trim() ? table.name : `Mesa ${table?.number ?? ''}`.trim());
+// "Mesa" virtual para pedidos para llevar. No existe en la base de datos, por
+// eso nunca se puede desactivar ni queda "ocupada": siempre acepta pedidos.
+const TOGO_ID = '__para_llevar__';
+const isTogoId = (id) => id === TOGO_ID;
+const getOrderLocationLabel = (order, withPrefix = true) => {
+  if (order?.table?.name?.trim()) return withPrefix ? `Mesa: ${order.table.name}` : order.table.name;
+  if (order?.table?.number) return withPrefix ? `Mesa: ${order.table.number}` : `Mesa ${order.table.number}`;
+  return order?.isToGo ? 'Para llevar' : 'Sin mesa';
+};
 
 export const Orders = () => {
   const location = useLocation();
@@ -819,11 +828,23 @@ export const Orders = () => {
     [tables, selectedDeliveryTableId],
   );
 
+  // Pedidos para llevar activos (todos los que tengan isToGo), para el acceso
+  // directo "Para llevar" del tablero de Entregas.
+  const togoOrders = useMemo(
+    () => orders.filter((order) => order.isToGo && isOrderActive(order)),
+    [orders],
+  );
+  const togoTotal = useMemo(
+    () => togoOrders.reduce((sum, order) => sum + Number(order.total || 0), 0),
+    [togoOrders],
+  );
+
   // Pedidos activos de la mesa seleccionada en Entregas (reutiliza
   // filteredOrders, que en la vista "entregas" ya trae solo pedidos
   // activos y que cumplen con la búsqueda).
   const deliveryOrdersForSelectedTable = useMemo(() => {
     if (!selectedDeliveryTableId) return [];
+    if (isTogoId(selectedDeliveryTableId)) return filteredOrders.filter((order) => order.isToGo);
     return filteredOrders.filter((order) => String(getOrderTableId(order)) === String(selectedDeliveryTableId));
   }, [filteredOrders, selectedDeliveryTableId]);
 
@@ -863,7 +884,7 @@ export const Orders = () => {
   // fusionar archivos a mano ni llevar un Excel aparte.
   const getOrderItemName = (item) => item.menuItem?.name || item.label || 'Platillo';
   const getOrderTableLabel = (order) =>
-    order?.table?.name?.trim() ? `Mesa ${order.table.name}` : order?.table?.number ? `Mesa ${order.table.number}` : 'Sin mesa';
+    order?.table?.name?.trim() ? `Mesa ${order.table.name}` : order?.table?.number ? `Mesa ${order.table.number}` : order?.isToGo ? 'Para llevar' : 'Sin mesa';
 
   const buildDailyReportWorkbook = (allOrders) => {
     // Hoja "Resumen diario": una fila por día con cantidad de pedidos y
@@ -1330,17 +1351,19 @@ export const Orders = () => {
       return;
     }
 
-    if (isTableOccupied(selectedTableId)) {
+    const isTogoSelection = isTogoId(selectedTableId);
+
+    if (!isTogoSelection && isTableOccupied(selectedTableId)) {
       showError('Esa mesa ya tiene un pedido activo. Debe entregarse o cancelarse antes de agregar uno nuevo.');
       return;
     }
 
     try {
       const payload = {
-        table: selectedTableId,
+        table: isTogoSelection ? undefined : selectedTableId,
         items: cart.map((entry) => ({ menuItem: entry.menuItem, quantity: entry.quantity, observations: entry.observations, price: entry.price })),
         observations: orderObservations,
-        isToGo: isToGoOrder,
+        isToGo: isTogoSelection || isToGoOrder,
         waiter,
       };
 
@@ -1397,13 +1420,7 @@ export const Orders = () => {
           <div>
             <p className='admin-kicker'>Pedido {order.orderNumber || `#${order._id?.slice(-6)}`}</p>
             <h3 className='mt-1 text-xl font-black text-[#e0e0e0]'>{formatDate(order.createdAt)}</h3>
-            <p className='mt-1 text-base font-semibold text-[#e0e0e0]'>{
-              order?.table?.name?.trim()
-                ? `Mesa: ${order.table.name}`
-                : order?.table?.number
-                  ? `Mesa: ${order.table.number}`
-                  : 'Sin mesa'
-            }</p>
+            <p className='mt-1 text-base font-semibold text-[#e0e0e0]'>{getOrderLocationLabel(order)}</p>
             <p className='mt-1 text-sm font-semibold text-[#e6be7d]'>Mesero: {order.waiter || 'Sin asignar'}</p>
           </div>
         </div>
@@ -1722,7 +1739,9 @@ export const Orders = () => {
               <div>
                 <h2 className='text-xl font-black text-[#e0e0e0]'>Pedido actual</h2>
                 <p className='mt-2 text-sm text-[#e6be7d]'>{
-                  tables.find((table) => table._id === selectedTableId)?.name?.trim()
+                  isTogoId(selectedTableId)
+                    ? 'Para llevar'
+                    : tables.find((table) => table._id === selectedTableId)?.name?.trim()
                     ? `Mesa ${tables.find((table) => table._id === selectedTableId)?.name}`
                     : tables.find((table) => table._id === selectedTableId)?.number
                       ? `Mesa ${tables.find((table) => table._id === selectedTableId)?.number}`
@@ -1739,6 +1758,7 @@ export const Orders = () => {
                 className='admin-input w-full px-3 py-3 text-sm'
               >
                 <option value=''>Elige una mesa</option>
+                <option value={TOGO_ID}>🥡 Para llevar (sin mesa)</option>
                 {sortedTables.map((table) => {
                   const occupied = isTableOccupied(table._id);
                   return (
@@ -1860,13 +1880,7 @@ export const Orders = () => {
                   <div>
                     <p className='admin-kicker'>Pedido {order.orderNumber || `#${order._id?.slice(-6)}`}</p>
                     <h3 className='mt-1 text-xl font-black text-[#e0e0e0]'>{formatDate(order.createdAt)}</h3>
-                    <p className='mt-1 text-base font-semibold text-[#e0e0e0]'>{
-                      order?.table?.name?.trim()
-                        ? `Mesa: ${order.table.name}`
-                        : order?.table?.number
-                          ? `Mesa: ${order.table.number}`
-                          : 'Sin mesa'
-                    }</p>
+                    <p className='mt-1 text-base font-semibold text-[#e0e0e0]'>{getOrderLocationLabel(order)}</p>
                   </div>
                 </div>
                 <div className='flex flex-col gap-2'>
@@ -1930,11 +1944,31 @@ export const Orders = () => {
             <span className='flex items-center gap-2 text-sm font-semibold text-[#e0e0e0]'>
               <span className='inline-block h-3.5 w-3.5 rounded-full bg-[#ef4444]'></span> Mesa ocupada · toca para ver sus pedidos
             </span>
+            <span className='flex items-center gap-2 text-sm font-semibold text-[#e0e0e0]'>
+              <span className='inline-block h-3.5 w-3.5 rounded-full bg-[#38bdf8]'></span> Para llevar · siempre activo
+            </span>
           </div>
           <div
             className='grid gap-4'
             style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))' }}
           >
+            <button
+              key={TOGO_ID}
+              type='button'
+              onClick={() => setSelectedDeliveryTableId(TOGO_ID)}
+              className='flex min-h-[132px] flex-col gap-3 rounded-3xl border-2 border-[#38bdf8]/60 bg-[#38bdf8]/15 px-5 py-5 text-left text-[#bae6fd] shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg'
+            >
+              <div className='flex items-start justify-between gap-2'>
+                <span className='min-w-0 flex-1 break-words text-lg font-black leading-tight'>🥡 Para llevar</span>
+                <span className='shrink-0 whitespace-nowrap rounded-full bg-black/20 px-3 py-1.5 text-xs font-bold uppercase tracking-wide'>
+                  {togoOrders.length} {togoOrders.length === 1 ? 'pedido' : 'pedidos'}
+                </span>
+              </div>
+              <div className='mt-auto flex items-center justify-between gap-2 border-t border-white/15 pt-3'>
+                <span className='text-xs font-bold uppercase tracking-wide opacity-80'>Total</span>
+                <span className='text-xl font-black tabular-nums'>{formatCurrency(togoTotal)}</span>
+              </div>
+            </button>
             {sortedTables.map((table) => {
               const occupied = isTableOccupied(table._id);
               const tableTotal = tableTotals.get(String(table._id)) || 0;
@@ -1978,24 +2012,36 @@ export const Orders = () => {
           <div className='mb-5 flex flex-wrap items-center justify-between gap-3'>
             <button type='button' onClick={() => setSelectedDeliveryTableId(null)} className='admin-button-secondary px-4 py-2 text-sm'>← Volver a mesas</button>
             <h2 className='text-xl font-black text-[#e0e0e0]'>
-              {selectedDeliveryTable ? getTableLabel(selectedDeliveryTable) : 'Mesa'}
+              {isTogoId(selectedDeliveryTableId) ? '🥡 Para llevar' : selectedDeliveryTable ? getTableLabel(selectedDeliveryTable) : 'Mesa'}
             </h2>
+            {isTogoId(selectedDeliveryTableId) && (
+              <button
+                type='button'
+                onClick={() => {
+                  setSelectedTableId(TOGO_ID);
+                  navigate('/dashboard/nuevo-pedido');
+                }}
+                className='admin-button-primary px-4 py-2 text-sm'
+              >
+                + Nueva orden para llevar
+              </button>
+            )}
           </div>
           <div className='admin-panel mb-5 flex flex-wrap items-center justify-between gap-3 px-6 py-5'>
             <div>
-              <p className='admin-kicker'>Cuenta de la mesa</p>
+              <p className='admin-kicker'>{isTogoId(selectedDeliveryTableId) ? 'Pedidos para llevar' : 'Cuenta de la mesa'}</p>
               <p className='mt-1 text-sm text-[#e6be7d]'>
                 {deliveryOrdersForSelectedTable.length} {deliveryOrdersForSelectedTable.length === 1 ? 'pedido activo' : 'pedidos activos'}
               </p>
             </div>
             <span className='text-3xl font-black text-[#e0e0e0] tabular-nums'>
-              {formatCurrency(tableTotals.get(String(selectedDeliveryTableId)) || 0)}
+              {formatCurrency(isTogoId(selectedDeliveryTableId) ? togoTotal : tableTotals.get(String(selectedDeliveryTableId)) || 0)}
             </span>
           </div>
           <div className='grid gap-4 xl:grid-cols-2'>
             {deliveryOrdersForSelectedTable.map(renderDeliveryOrderCard)}
             {deliveryOrdersForSelectedTable.length === 0 && (
-              <div className='admin-panel p-8 text-sm text-[#e6be7d]'>Esta mesa no tiene pedidos pendientes de entrega.</div>
+              <div className='admin-panel p-8 text-sm text-[#e6be7d]'>{isTogoId(selectedDeliveryTableId) ? 'No hay pedidos para llevar pendientes.' : 'Esta mesa no tiene pedidos pendientes de entrega.'}</div>
             )}
           </div>
         </section>
@@ -2056,13 +2102,7 @@ export const Orders = () => {
                         <div>
                           <p className='text-sm font-bold uppercase tracking-[0.18em] text-[#e6be7d]'>Pedido {order.orderNumber || `#${order._id.slice(-6)}`}</p>
                           <p className='mt-1 text-sm text-[#e0e0e0]'>{formatDate(order.createdAt)}</p>
-                          <p className='mt-1 text-sm text-[#c19a6b]'>{
-                            order?.table?.name?.trim()
-                              ? `Mesa ${order.table.name}`
-                              : order?.table?.number
-                                ? `Mesa ${order.table.number}`
-                                : 'Sin mesa'
-                          }</p>
+                          <p className='mt-1 text-sm text-[#c19a6b]'>{order?.table?.name?.trim() ? `Mesa ${order.table.name}` : order?.table?.number ? `Mesa ${order.table.number}` : order?.isToGo ? 'Para llevar' : 'Sin mesa'}</p>
                         </div>
                         <div className='flex flex-col items-start gap-2 sm:items-end'>
                           <span className='text-lg font-black text-[#e0e0e0]'>{formatCurrency(order.total)}</span>
