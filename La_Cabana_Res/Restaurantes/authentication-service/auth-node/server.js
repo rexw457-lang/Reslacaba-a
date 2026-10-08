@@ -25,6 +25,7 @@ import Reservation from "./src/models/Reservation.js";
 import Review from "./src/models/Review.js";
 import User from "./src/models/User.js";
 import Role from "./src/models/Role.js";
+import { startDailyCutScheduler } from "./src/services/dailyCut.service.js";
 
 
 dotenv.config();
@@ -59,6 +60,9 @@ if (!mongoUri) {
 mongoose.connect(mongoUri)
     .then(async () => {
         console.log("MongoDB conectado");
+        // Corte diario de las 00:00: cierra como Entregado los pedidos que sigan activos.
+        // Va antes de los seeds para que arranque aunque alguno de ellos falle.
+        startDailyCutScheduler();
         await seedInternalProfiles();
         await migrateBebidasFriasCategories();
         await seedBaseMenuItems();

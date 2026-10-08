@@ -84,6 +84,12 @@ const orderSchema = new mongoose.Schema(
             enum: ["Pendiente", "Preparando", "Entregado", "Cancelado"],
             default: "Pendiente",
         },
+        // Se llena solo cuando el pedido lo cerró el corte diario de las 00:00
+        // (y no una persona). Permite distinguirlos en reportes.
+        autoClosedAt: {
+            type: Date,
+            default: null,
+        },
     },
     { timestamps: true },
 );
